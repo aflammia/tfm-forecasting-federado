@@ -1,0 +1,34 @@
+# --- Credenciales y secretos (NUNCA subir) ---
+*.json
+!configs/*.json
+kaggle.json
+access_token
+.env
+*.key
+
+# --- Datos (pesados, no van al repo) ---
+data/raw/
+data/processed/
+*.csv
+*.parquet
+*.zip
+
+# --- Entorno Python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# --- Salidas de experimentos ---
+wandb/
+mlruns/
+outputs/
+*.ckpt
+*.pt
+*.pth
+
+# --- Sistema ---
+.DS_Store
+Thumbs.db
