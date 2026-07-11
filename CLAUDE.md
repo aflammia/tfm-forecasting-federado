@@ -38,6 +38,24 @@ paralelo: un stack **MLOps de producción** que impresione a reclutadores de Big
 - Favorita tiene quirks conocidos a tener en cuenta al modelar: **terremoto de abril 2016** (pico de ventas), **días de pago** (15 y fin de mes suben ventas), economía dependiente del **petróleo** (columna oil), y **algunas tiendas abren tarde** (no todas tienen histórico completo desde 2013).
 - Hay ventas en 0 y familias sin apenas movimiento en tiendas pequeñas → usar WMAPE (no MAPE, que explota con ceros).
 
+## Entornos de ejecución (LOCAL vs NUBE) — léelo antes de ejecutar nada
+
+Este proyecto se trabaja desde dos sitios. Detecta en cuál estás y usa los comandos correctos:
+
+**A) Local — PC Windows del autor** (sesiones de escritorio):
+- Python del venv: `./.venv/Scripts/python.exe`
+- Token de Kaggle: archivo `C:\Users\alefl\.kaggle\access_token`
+- Datos ya presentes en `data/raw/`
+- Antepón `PYTHONIOENCODING=utf-8` a los scripts (consola Windows).
+
+**B) Nube — Claude Code on the web / móvil** (VM Linux efímera):
+- El repo se clona SIN datos, SIN `.venv` y SIN token (todo está gitignored). Hay que reconstruir.
+- Python del sistema directamente (`python`), tras instalar deps: `pip install -r requirements.txt` (ideal: dejarlo en el *Setup script* del entorno cloud).
+- Token de Kaggle: variable de entorno `KAGGLE_API_TOKEN` (configurada en el panel del entorno cloud), no archivo.
+- Datos: ejecutar `python src/00_download_data.py` (idempotente; lee el token de la env var o del archivo). Requiere que el dominio de Kaggle esté permitido en el acceso de red del entorno.
+
+**Regla práctica de reparto de trabajo:** la nube/móvil es ideal para **planificar, redactar la memoria, escribir/revisar código y revisar PRs** (no necesitan los datos). Las **ejecuciones pesadas de datos y entrenamiento** conviene hacerlas en local o en el cómputo de Azure previsto — no en la VM efímera de la nube.
+
 ## Regla de documentación (OBLIGATORIA)
 
 Esto es un TFM: **si no está documentado, no cuenta.** Cada paso con resultados (un script que
