@@ -36,7 +36,7 @@ Versiones instaladas confirmadas: `kaggle 2.2.3`, `pandas 3.0.3`, `numpy 2.4.6`,
 
 ### Autenticación con Kaggle
 
-Se generó un token de API de Kaggle (formato nuevo `KGAT_...`) y se guardó en `C:\Users\alefl\.kaggle\access_token`. **Nota de seguridad:** el token fue compartido inicialmente por el usuario en el chat de la sesión; queda registrado aquí que se marcó como pendiente su regeneración (ver `STATE.md`, sección "Pendiente"), práctica estándar cuando un secreto ha quedado expuesto en un canal no cifrado de forma persistente.
+Se generó un token de API de Kaggle (formato nuevo `KGAT_...`) y se guardó en `C:\Users\alefl\.kaggle\access_token`. **Nota de seguridad:** el token fue compartido inicialmente por el usuario en el chat de la sesión; se marcó como pendiente su regeneración (ver `STATE.md`), práctica estándar cuando un secreto ha quedado expuesto en un canal no cifrado de forma persistente.
 
 Verificación de autenticación:
 ```bash
@@ -64,7 +64,7 @@ Descarga vía CLI oficial de Kaggle de la competición `store-sales-time-series-
 ```bash
 ./.venv/Scripts/kaggle.exe competitions download -c store-sales-time-series-forecasting -p data/raw
 ```
-Requisito previo (documentado para reproducibilidad): el usuario debe haber aceptado las reglas de la competición en `kaggle.com/competitions/store-sales-time-series-forecasting/rules` — sin este paso, la API devuelve error 403.
+Requisito previo: el usuario debe haber aceptado las reglas de la competición en `kaggle.com/competitions/store-sales-time-series-forecasting/rules` — sin este paso, la API devuelve error 403.
 
 Descompresión: `unzip -o -q store-sales-time-series-forecasting.zip`.
 
@@ -83,7 +83,7 @@ Tamaño total del zip descargado: 21,4 MB.
 
 ### Nota metodológica
 
-`test.csv` y `sample_submission.csv` pertenecen al formato original de la competición Kaggle (para su leaderboard) y **no se usan** en este TFM — nuestro propio corte de validación temporal (walk-forward) se construye a partir de `train.csv` en la Fase 1 del plan, ya que necesitamos control total sobre las fechas de corte para la comparación entre condiciones experimentales.
+`test.csv` y `sample_submission.csv` pertenecen al formato original de la competición Kaggle y **no se usan** en este TFM — nuestro propio corte de validación temporal (walk-forward) se construye a partir de `train.csv` en la Fase 1, ya que necesitamos control total sobre las fechas de corte para la comparación entre condiciones experimentales.
 
 ### Reproducibilidad
 ```bash
@@ -189,6 +189,113 @@ La partición **por formato de tienda** produce la mayor heterogeneidad de compo
 ```bash
 cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
 PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/02_silo_strategy.py
+```
+
+---
+
+## Sesión 5 — Diseño detallado del pipeline de modelado y del algoritmo federado
+
+**Fecha:** 2026-07-11
+**Objetivo:** fijar, a bajo nivel, la variable objetivo, el conjunto de features, la arquitectura del modelo, el bucle de entrenamiento local y el algoritmo de FedAvg — respondiendo explícitamente a por qué se incluye o excluye cada elemento.
+
+### Variable objetivo
+
+Misma para las 5 condiciones experimentales (A–E): `y(tienda, familia, semana) = Σ ventas diarias de esa semana`. Se predice en escala `log(1+y)` y se deshace con `exp(ŷ)−1` al final.
+
+**Justificación de la transformación logarítmica (con detalle matemático):**
+
+- **Motivo 1 — heterocedasticidad.** La varianza de las ventas crece con su media (tiendas grandes fluctúan en miles de unidades, tiendas pequeñas en decenas). MSE asume varianza constante; log(1+y) estabiliza la varianza.
+- **Motivo 2 — robustez a valores atípicos.** El terremoto de abril de 2016 (evento documentado en el propio dataset) genera un pico extremo de ventas que, en escala cruda, dominaría el entrenamiento por MSE. En escala logarítmica su influencia se comprime.
+- **Ejemplo numérico verificado:** dos tiendas con el mismo 20% de error relativo (10.000→12.000 unidades vs. 50→60 unidades) contribuyen **4.000.000 vs. 100** al error cuadrático en escala cruda (40.000× de diferencia), pero **0,0333 vs. 0,0321** en escala log(1+y) — prácticamente idénticos. Esto confirma que log(1+y) aproxima el **error relativo**, no el absoluto: para desviaciones pequeñas, `log(y)−log(ŷ) ≈ (y−ŷ)/y`.
+- **Validación externa:** la competición Kaggle original de este mismo dataset (Corporación Favorita Grocery Sales Forecasting, 2017) usó como métrica oficial **NWRMSLE** (Normalized Weighted Root Mean Squared Logarithmic Error), exactamente la familia de métrica que resulta de entrenar con MSE sobre log(1+y) — confirmando que el propio diseño del dataset anticipó este mismo problema. Fuente: documentación de la competición, recuperada 2026-07-10 ([kaggle.com/c/favorita-grocery-sales-forecasting](https://www.kaggle.com/c/favorita-grocery-sales-forecasting); ponderación 1,25 para productos perecederos, 1,00 para el resto).
+- **Consistencia con la métrica de evaluación:** al entrenar en log-espacio, el objetivo de optimización queda alineado con **WMAPE** (la métrica de evaluación ya elegida) — evita el desajuste metodológico de entrenar para una cosa y medir otra.
+- **Relevancia específica para el sistema federado:** los 3 silos tienen escalas de venta distintas (ratio ~2,2×, Sesión 4). Entrenar en escala cruda produciría redes que aprenden "en unidades" distintas por silo, dificultando que el promediado de FedAvg tenga sentido. Log(1+y) normaliza la escala numérica **antes** de la agregación, haciendo la mecánica de FedAvg más estable.
+- **Matiz honesto:** la aproximación log-diferencia ≈ error relativo es válida para desviaciones pequeñas; se degrada si el modelo predice muy mal. Para el rango de error esperado en este proyecto es una aproximación razonable, no exacta.
+- **Distinción de un concepto relacionado pero distinto:** esto NO es lo mismo que el *log loss* (entropía cruzada) usado en clasificación — ese log viene de la verosimilitud de una distribución categórica; el de aquí es una transformación del objetivo de regresión para estabilizar varianza.
+
+### Variables de entrada (features)
+
+Ver tabla completa en el documento técnico de la sesión (9 grupos: autorregresivas — lags 1/2/4/8 semanas y medias móviles —, calendario, días de pago, promoción, festivos, petróleo, embeddings de familia y de tienda/cluster). Todas calculadas solo con información anterior a la semana predicha.
+
+**Decisión — precio excluido de las features:** `train.csv` de Favorita no contiene ninguna columna de precio (solo `onpromotion`, un indicador binario/contador de si el producto está en oferta). Es una **limitación real del dataset**, no una elección de diseño: el modelo puede aprender el efecto de estar en promoción, pero no la elasticidad-precio. Se documentará explícitamente en el capítulo de limitaciones de la memoria.
+
+### Arquitectura del modelo
+
+MLP con embeddings de entidad — misma arquitectura para las 5 condiciones (A–E); lo que cambia entre condiciones es qué datos la entrenan, no su forma.
+
+- Entrada: ~12 features continuas + embedding de familia (33→8 dim) + embedding de tienda/cluster (≤54→8 dim) = 28 dimensiones.
+- Densa(28→64) → ReLU → Dropout(0,2) → Densa(64→32) → ReLU → Densa(32→1).
+- ~10.000–15.000 parámetros.
+- Pérdida: Huber (robusta a outliers) sobre el objetivo en log(1+y). Optimizador: Adam, lr inicial 1e-3.
+
+**Justificación de no usar LightGBM/XGBoost como modelo federado:** FedAvg promedia pesos numéricos entre participantes; las matrices de una red neuronal se prestan a esto de forma directa, mientras que la estructura de árboles de un GBM no se promedia de forma limpia (existe investigación de "federated boosting", fuera de alcance). LightGBM se mantiene como referencia clásica no-federada.
+
+**Justificación de no usar LSTM/TCN (de entrada):** con datos semanales (no diarios) y series moderadamente cortas (~241 semanas), una red recurrente añade complejidad de entrenamiento y de defensa sin garantía de mejora clara. Se documenta como extensión posible (stretch), no como necesidad — en línea con la instrucción explícita de evitar sobre-ingeniería.
+
+### El algoritmo de FedAvg (McMahan et al., 2017)
+
+Participantes del federado: **los 3 silos** (no las 54 tiendas sueltas). Cada silo centraliza internamente sus propias tiendas (legítimo, es el mismo operador simulado); entre silos, solo se intercambian pesos.
+
+```
+servidor inicializa pesos globales w⁰
+para cada ronda t = 1...T:
+    servidor envía wᵗ a los 3 silos
+    cada silo k entrena localmente E épocas desde wᵗ con sus propios datos → wₖᵗ⁺¹
+    cada silo envía wₖᵗ⁺¹ al servidor (nunca datos crudos)
+    servidor agrega: wᵗ⁺¹ = Σₖ (nₖ/n) · wₖᵗ⁺¹        # media ponderada por nº de filas
+    servidor evalúa pidiendo a cada silo su métrica local (un escalar, no datos)
+hasta que la métrica de validación deje de mejorar
+```
+
+Jerarquía de 3 niveles: (1) tienda — personalización opcional post-federado (condición E); (2) silo — participante real de FedAvg; (3) global — modelo resultante de la agregación.
+
+### Validación temporal y evaluación
+
+Walk-forward (test = últimas ~8 semanas por silo, nunca se mezcla con el futuro). WMAPE por serie/silo/agregado. Test de Wilcoxon pareado entre condiciones.
+
+### Estado de las decisiones de esta sesión
+
+Todas presentadas como propuesta técnica razonada; arquitectura y algoritmo son la base de referencia para implementar en la Fase 1-4 del `PLAN.md`. Ajustables si la experimentación real (Fase 2 en adelante) sugiere cambios — se documentará como nueva sesión si ocurre.
+
+---
+
+## Sesión 6 — Notebook de repaso: regresión lineal desde cero
+
+**Fecha:** 2026-07-11
+**Notebook:** `notebooks/00_refresher_regresion_lineal.ipynb`
+**Objetivo:** material de apoyo pedagógico (no un resultado de investigación) — repasar los fundamentos de regresión lineal simple y múltiple implementándolos sin librerías de ML, como preparación conceptual antes de construir el MLP de la Sesión 5. Se documenta aquí porque es parte del trabajo del proyecto y su ejecución generó resultados verificables.
+
+### Método
+
+1. Instalación de herramientas de notebook en el entorno: `nbformat`, `nbclient`, `nbconvert`, `ipykernel`, `jupyter_client` (añadidas a `requirements.txt`).
+2. Registro del entorno virtual como kernel de Jupyter: `python -m ipykernel install --user --name tfmfl --display-name "Python (tfm-forecasting-federado)"`.
+3. Generación programática del notebook (vía script con `nbformat`, no escrito a mano en la UI de Jupyter) con 25 celdas: teoría (derivación matemática de las ecuaciones normales, simple y múltiple), datos sintéticos con relación verdadera conocida, implementación manual, descenso de gradiente, visualizaciones, y verificación final contra `scikit-learn`.
+4. Ejecución completa del notebook con `jupyter nbconvert --execute`, embebiendo las salidas (gráficas y resultados) directamente en el archivo.
+
+### Resultados
+
+**Regresión simple** — datos sintéticos (n=60, relación verdadera y=3+2x+ruido):
+- Ecuaciones normales: β₀=3,1773, β₁=1,9256
+- Descenso de gradiente (lr=0,03, 3.000 iteraciones): β₀=3,1773, β₁=1,9256 — **coincide hasta el 4º decimal**
+- scikit-learn (`LinearRegression`): β₀=3,177304, β₁=1,925616 — **coincide exactamente** con la implementación manual
+- R² = 0,9165
+
+**Regresión múltiple** — datos sintéticos (n=120, 2 variables, relación verdadera y=5+1,5x₁−2x₂+ruido):
+- Ecuación normal matricial: β=[4,6575, 1,4925, −1,7920]
+- scikit-learn: β=[4,657499, 1,492499, −1,792031] — **coincide exactamente**
+- R² = 0,9477
+
+0 errores de ejecución en las 13 celdas de código.
+
+### Interpretación
+
+La coincidencia exacta entre la implementación manual (ecuaciones normales), el descenso de gradiente, y `scikit-learn` confirma que ambas derivaciones matemáticas (Sección 1.3 y 3.2 del notebook) están correctamente implementadas. El ajuste del learning rate/iteraciones de descenso de gradiente (de lr=0,01/500 iter a lr=0,03/3.000 iter en una segunda iteración de este mismo notebook) fue necesario para alcanzar convergencia completa — un recordatorio práctico de que el descenso de gradiente, a diferencia de la ecuación cerrada, depende de hiperparámetros bien elegidos. Este mismo problema (elegir learning rate y nº de pasos) reaparecerá al entrenar el MLP de la Sesión 5.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+./.venv/Scripts/python.exe -m ipykernel install --user --name tfmfl --display-name "Python (tfm-forecasting-federado)"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/jupyter-nbconvert.exe --to notebook --execute --ExecutePreprocessor.kernel_name=tfmfl notebooks/00_refresher_regresion_lineal.ipynb --output 00_refresher_regresion_lineal.ipynb
 ```
 
 ---

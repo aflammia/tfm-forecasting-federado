@@ -34,8 +34,8 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
 - **Métricas:** WMAPE (principal), RMSSE, MASE. Por serie (tienda×familia), por silo y agregada.
 - **Validación:** walk-forward temporal. Sugerido: test = últimas ~8 semanas, val = 8 previas, resto train.
 - **Significancia:** Wilcoxon pareado sobre WMAPE por serie entre condiciones (A vs D, C vs D, D vs E).
-- **Modelo base:** red pequeña en PyTorch (empezar con MLP sobre features tabulares + lags; considerar LSTM/TCN si mejora). LightGBM como referencia clásica no-federada.
-- **FL jerárquico:** clientes = tiendas; agregación dentro de silo (formato) y luego entre silos.
+- **Modelo base:** MLP con embeddings de entidad (familia + tienda/cluster), ~28→64→32→1, Huber loss sobre log(1+ventas), Adam. Detalle completo en `RESEARCH_LOG.md`, Sesión 5. LightGBM como referencia clásica no-federada (no se federa).
+- **FL jerárquico:** los **3 silos son los clientes/participantes de FedAvg** (cada silo centraliza internamente sus propias tiendas — es el mismo operador simulado). La personalización por tienda individual (condición E) es un ajuste fino *posterior* a la convergencia del federado, no un nivel adicional de FedAvg.
 
 ---
 
@@ -63,9 +63,9 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
 - Integrar **Weights & Biases** desde aquí (trackear cada corrida y condición).
 
 ### FASE 3 — Federado (D, E) — resultado central
-- **T3.1** Montar Flower (simulación): cada tienda = cliente. Definir modelo, rondas, muestreo.
-- **T3.2** Condición D: FedAvg plano y **jerárquico** (tiendas→silo→global). Comparar con FedProx (robusto a no-IID).
-- **T3.3** Condición E: personalización (global + cabeza local por tienda/silo, estilo FedPer).
+- **T3.1** Montar Flower (simulación): **cada silo = cliente** (3 participantes; cada silo centraliza internamente sus tiendas). Definir modelo (MLP+embeddings, Sesión 5), rondas, agregación ponderada por nº de filas.
+- **T3.2** Condición D: FedAvg entre los 3 silos. Comparar con FedProx (robusto a no-IID).
+- **T3.3** Condición E: personalización post-federado — fine-tuning de la última capa/embedding por tienda individual, estilo FedPer, sobre el modelo global ya convergido.
 - **T3.4** Manejo de stragglers y muestreo de clientes.
 - **T3.5** Comparación estadística A/B/C/D/E + métrica "brecha recuperada". Figuras a `reports/figures/`.
 
