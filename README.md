@@ -14,7 +14,7 @@ Trabajo de Fin de Máster · Máster en Análisis de Datos en Ingeniería (Tecnu
 
 ## Datos
 
-[Corporación Favorita](https://www.kaggle.com/competitions/store-sales-time-series-forecasting) — cadena real de supermercados de Ecuador: 54 tiendas en 22 ciudades, ventas diarias por familia de producto (33 familias), 2013-2017. Se particiona por región en varios silos que actúan como supermercados independientes que no comparten datos.
+[Corporación Favorita](https://www.kaggle.com/competitions/store-sales-time-series-forecasting) — cadena real de supermercados de Ecuador: 54 tiendas en 22 ciudades, ventas diarias por familia de producto (33 familias), 2013-2017. Se particiona por **formato de tienda** (grande / mediano / pequeño ≈ hiper / súper / proximidad) en 3 silos que actúan como supermercados independientes que no comparten datos. El formato es el reparto con mayor heterogeneidad de comportamiento de compra entre silos (ver `src/02_silo_strategy.py`).
 
 ## Estado
 
