@@ -71,3 +71,4 @@ Este cuaderno es la materia prima de los capítulos de Metodología y Resultados
 
 Ver **`docs/STATE.md`** — documento vivo, actualízalo al completar cada tarea.
 Ver **`docs/RESEARCH_LOG.md`** — cuaderno de laboratorio, añade una entrada por cada paso con resultados.
+Ver **`docs/DATA.md`** — diccionario de datos: qué contiene cada fichero, granularidad, gotchas conocidos (tiendas de apertura tardía, festivos transferidos, etc.) y el plan de uso de los datos mapeado a cada fase. Léelo antes de tocar cualquier fichero de `data/raw/`.

@@ -60,8 +60,12 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
   `data/processed/stores_silos.csv` con columna `silo`.
 - **T1.2** Construir dataset de modelado: agregar `train.csv` a **tienda×familia×semana** (suma de `sales`,
   media de `onpromotion`). Unir covariables: precio del petróleo (semanal), flags de festivo
-  (de `holidays_events.csv`, cuidado con `locale`: Nacional/Regional/Local y `transferred`), y features
-  de calendario (semana del año, mes, ¿es semana con día de pago?). Guardar parquet en `data/processed/`.
+  (de `holidays_events.csv`, cuidado con `locale`: Nacional/Regional/Local, `transferred` —cruzar con
+  el registro `type=Transfer` correspondiente— y fechas con múltiples eventos simultáneos), y features
+  de calendario (semana del año, mes, ¿es semana con día de pago?). **Recortar el histórico de cada
+  tienda a partir de su fecha real de apertura** (8 tiendas abrieron durante el periodo — ver
+  `docs/DATA.md` sección 2.6.1, especial atención a la tienda 52 con solo ~4 meses de historia).
+  Guardar parquet en `data/processed/`.
 - **T1.3** Corte temporal walk-forward por fecha (train/val/test). Guardar el corte en `configs/`.
 - **T1.4** Feature engineering: lags (1,2,4,8 semanas), medias móviles, promo, calendario, festivos, oil.
   Documentar cada feature. Normalización por serie (para manejar la heterogeneidad de escala entre silos).

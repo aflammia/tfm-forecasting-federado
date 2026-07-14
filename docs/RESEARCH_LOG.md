@@ -361,6 +361,78 @@ convencionales (pregunta abierta, sin resolver a fecha de esta entrada).
 
 ---
 
+## Sesión 8 — Overview completo de datos: verificación exhaustiva + criterio de silo validado
+
+**Fecha:** 2026-07-14
+**Objetivo:** (1) validar con datos reales si "venta media" es el criterio correcto para agrupar
+los tipos de tienda en silos, comparándolo con una alternativa (tráfico de clientes); (2)
+inspeccionar a fondo los 6 ficheros del dataset, verificando cifras exactas en vez de asumirlas
+de sesiones anteriores, y producir un diccionario de datos permanente (`docs/DATA.md`).
+
+### Método — validación del criterio de silo
+
+Se calculó, por tipo de tienda (A-E), la venta total media por tienda y la media diaria de
+transacciones (`transactions.csv`), y se comparó el orden resultante de cada métrica.
+
+### Resultados
+
+| Tipo | Venta media/tienda | Transacciones/día |
+|---|---|---|
+| A | 39.227.094 | 3.104,3 |
+| D | 19.504.628 | 1.593,7 |
+| B | 18.157.579 | 1.698,0 |
+| E | 14.955.609 | 1.179,0 |
+| C | 10.962.316 | 1.021,6 |
+
+Correlación de Pearson (venta total vs. transacciones medias, a nivel de tienda): **0,9096**.
+Orden por venta: A > D > B > E > C. Orden por transacciones: **A > B > D > E > C** (D y B
+intercambian posición).
+
+### Interpretación y decisión
+
+D y B son prácticamente indistinguibles (su orden depende de qué métrica se use), mientras que A
+queda claramente por encima y C claramente por debajo **en ambas métricas**. La frontera natural
+{A} | {D,B} | {E,C} — la "Propuesta 2" de la sesión anterior — es **robusta a la elección de
+variable**, lo que la valida con más solidez que un solo criterio. Se documenta también, con
+honestidad metodológica, que la variable "ideal" en un escenario con todos los datos disponibles
+sería superficie de venta (m²) y nº de referencias — atributos de diseño de la tienda, no
+proxies derivados de venta/tráfico — pero no están disponibles en este dataset.
+
+**Decisión: se confirma la Propuesta 2 de partición de silos** (Grande=tipo A · Mediano=tipos D+B
+· Pequeño=tipos E+C), pendiente de generar `stores_silos.csv` en la siguiente tarea.
+
+### Método — overview exhaustivo de datos
+
+Inspección directa (dtypes, nulos, rangos, duplicados, completitud del panel) de los 6 ficheros.
+Resultado completo en `docs/DATA.md` (nuevo documento permanente). Hallazgos nuevos no
+documentados en sesiones anteriores:
+
+- **8 tiendas abrieron durante el periodo del dataset** (no las 54 desde 2013-01-01): tiendas
+  36, 53, 20, 29, 21, 42, 22, y **52 (con solo ~4 meses de historia real, abrió 2017-04-20)**.
+  Repartidas entre tipos: A=1, B=2, C=1, D=2, E=2 — **el tipo E tiene 2 de sus 4 tiendas (50%)
+  con historial corto**, lo que puede subestimar levemente su venta media reportada arriba. No
+  cambia la decisión de silo (E ya quedaba en el grupo "Pequeño" en ambas propuestas), pero se
+  documenta como limitación honesta.
+- **`transactions.csv` tiene huecos**: 7.340 combinaciones tienda-día faltantes de las 90.828
+  esperadas (tiendas cerradas ese día).
+- **`oil.csv` tiene 43 nulos** (días sin cotización bursátil) — se resuelve solo al agregar a
+  semana (T1.2), sin necesitar interpolación explícita.
+- **`holidays_events.csv`**: 12 festivos "transferred" (la fecha real del festivo está en un
+  registro `type=Transfer` aparte) y 38 fechas con más de un evento simultáneo — ambos casos
+  exigen tratamiento explícito en el feature engineering de T1.2/T1.4, no se pueden ignorar.
+
+### Impacto en el plan
+
+Se añade a T1.2/T1.4 (`PLAN.md`) el recorte del histórico de cada tienda a su fecha real de
+apertura, y el tratamiento correcto de festivos transferidos/duplicados — ambos ya anotados
+en `docs/DATA.md` sección 2.6 y sección 4 (plan de uso por fase).
+
+### Reproducibilidad
+Comandos completos ejecutados y verificados en esta sesión — ver historial de shell; resumen de
+resultados en `docs/DATA.md`.
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown
