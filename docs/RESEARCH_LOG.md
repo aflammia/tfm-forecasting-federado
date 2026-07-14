@@ -300,6 +300,67 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/jupyter-nbconvert.exe --to notebook --exe
 
 ---
 
+## Sesión 7 — Reenfoque tras reunión con el tutor: equilibrio técnico + negocio
+
+**Fecha:** 2026-07-14
+**Tipo:** decisión de alcance (no ejecución de código)
+**Objetivo:** registrar el reenfoque acordado con el tutor del TFM y su justificación.
+
+### Contexto
+
+El autor se reunió con el tutor experto en federated learning para revisar el enfoque del
+proyecto. El tutor indicó que el TFM debe equilibrar la vertiente técnica y la de negocio:
+no basta con demostrar que el modelo federado supera a las alternativas locales/centralizadas —
+hay que demostrar que supera a los **métodos convencionales de forecasting usados en retail**, y
+argumentar **por qué tiene valor de negocio** superior a alternativas ya establecidas como los
+**data clean rooms**.
+
+### Investigación de apoyo (previa a fijar la decisión)
+
+Se investigó el estado 2026 de los data clean rooms frente al federated learning para
+fundamentar la comparación con fuentes reales, no por intuición:
+
+- Los data clean rooms (Snowflake, AWS, Decentriq, etc.) están diseñados para **responder
+  preguntas sobre datos existentes** (medición de campañas, audiencias) mediante joins
+  controlados — no para **entrenar modelos predictivos** de forma nativa. El dato normalmente
+  **sí se mueve** a un entorno compartido (aunque el output que sale sea agregado), y requiere
+  confiar en un operador o en hardware de cómputo confidencial.
+- El federated learning, en cambio, es un **método de entrenamiento** en el que el dato nunca
+  sale de su origen — encaja de forma directa con la tarea de este TFM (construir un modelo
+  predictivo entre operadores que no comparten datos).
+- Nota honesta: ambos mundos están **convergiendo** (algunos clean rooms ya incorporan
+  entrenamiento federado internamente) — no es una dicotomía absoluta, y el TFM debe reconocerlo
+  en vez de presentar el FL como sustituto universal.
+- Fuentes: [Federated Learning vs Data Clean Rooms (Sherpa.ai)](https://sherpa.ai/blog/federated-learning-vs-data-clean-rooms-2/), [Snowflake Data Clean Rooms](https://www.snowflake.com/en/product/features/data-clean-rooms/), [Data Clean Rooms 2026: guía de decisión](https://www.digitalapplied.com/blog/data-clean-rooms-advertising-2026-marketer-decision-guide) — consultadas 2026-07-14.
+
+### Decisión tomada
+
+1. **Preguntas de investigación reformuladas** — de 3 (todas técnicas) a 5 (2 técnicas + 2 de
+   negocio + 1 stretch). Ver `PLAN.md` sección 0 para el texto exacto (RQ1-RQ5).
+2. **Baselines de la Fase 2 ampliados** (nueva tarea T2.2b): se añaden suavizado exponencial
+   (ETS/Holt-Winters) y LightGBM por tienda como referencia de "métodos convencionales de
+   retail" — sin esto, RQ2 ("¿supera el federado a lo convencional?") no tendría con qué
+   contrastarse más allá de un naive.
+3. **Dos capítulos nuevos** (Fase 4b, `PLAN.md`): comparación estructurada FL vs. data clean
+   rooms (T4b.1), y cuantificación del valor de negocio en euros a partir de la mejora de WMAPE
+   (T4b.2). Ambos son análisis/escritura — no requieren entrenar modelos nuevos.
+4. **Estado del arte de la memoria** pasa a cubrir tres bloques: métodos de forecasting +
+   federated learning + data clean rooms (antes solo cubría FL).
+
+### Impacto en el cronograma
+
+Mínimo. Los dos capítulos nuevos son de análisis y redacción (ejecutables incluso sin acceso a
+los datos, p. ej. desde una sesión móvil); el único coste técnico añadido es entrenar ETS y
+LightGBM como baselines, rápido comparado con el resto del pipeline. Se trata sobre todo de un
+reequilibrio de la narrativa de la memoria, no de más experimentación.
+
+### Pendiente de esta sesión
+
+Confirmar con el autor si además de ETS quiere incluir ARIMA/Prophet en los baselines
+convencionales (pregunta abierta, sin resolver a fecha de esta entrada).
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown
