@@ -726,6 +726,37 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/06_temporal_split.py
 
 ---
 
+## Sesión 14 — Reporte de progreso (Fase 1 completa)
+
+**Fecha:** 2026-07-15
+**Script:** `src/07_report_figures.py`
+**Objetivo:** cierre de la Fase 1 (Pipeline de datos) con un reporte de progreso estilo memoria,
+para comunicar el estado del proyecto y dejar material gráfico reutilizable directamente en la
+memoria final. No es una sesión de investigación nueva — consolida y visualiza las Sesiones 7-13.
+
+### Material generado
+
+Cinco figuras a partir de datos reales del proyecto (no maquetas), guardadas en `reports/figures/`:
+
+- `r1_serie_semanal_split.png` — ventas semanales agregadas 2013-2017, con el pico del terremoto
+  de abril de 2016 señalado y las bandas de validación/test marcadas.
+- `r2_composicion_silos.png` — nº de tiendas y venta media por silo (Propuesta 2).
+- `r3_venta_vs_transacciones.png` — venta media y tráfico por tipo de tienda, evidencia visual del
+  salto natural que justifica la frontera Grande={A}.
+- `r4_type_cluster_heatmap.png` — tabla cruzada type×cluster, evidencia del anidamiento (Sesión 12).
+- `r5_fedavg_toy_resultado.png` — resultado de la simulación de FedAvg del notebook 01 (Sesión 10).
+
+Estas figuras son directamente reutilizables en los capítulos de Metodología y Resultados de la
+memoria final — no son ilustrativas, están calculadas sobre los datos verificados del proyecto.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/07_report_figures.py
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown
