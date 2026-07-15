@@ -9,8 +9,12 @@ matplotlib>=3.7
 seaborn>=0.13
 scipy>=1.11
 
-# Modelado (se ampliará: torch, flwr, etc. en fases posteriores)
+# Modelado
 scikit-learn>=1.3
+torch>=2.1
+lightgbm>=4.0
+statsmodels>=0.14
+# Flower (federated learning real, Fase 3) se añadirá cuando toque T3.1
 
 # Notebooks (generación y ejecución programática)
 nbformat>=5.9

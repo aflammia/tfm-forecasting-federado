@@ -1,7 +1,9 @@
 # STATE.md — Estado actual y próxima tarea
 
 > Documento vivo. **Actualízalo al completar cada tarea** (marca hecho, anota lo aprendido).
-> Última actualización: 2026-07-14 — reenfoque técnico+negocio acordado con el tutor (ver RESEARCH_LOG Sesión 7); GATE de T1.1 ejecutado (counts por tipo ya mostrados), pendiente de que el autor elija entre Propuesta 1 y Propuesta 2 de agrupamiento.
+> Última actualización: 2026-07-15 — **T1.1 y T1.2 cerradas.** Silos (Propuesta 2), baselines T2.2b y
+> granularidad familia/semana confirmados y documentados (Sesión 9); notebook 01 MLP+embeddings+FedAvg
+> (Sesión 10); dataset de modelado construido y verificado, 0 nulos (Sesión 11). Próxima: T1.3.
 
 ## ✅ Hecho
 
@@ -23,34 +25,25 @@
 - [x] Criterio de silo **validado con segunda métrica** (transacciones/tráfico, correlación 0,91 con venta) — Propuesta 2 confirmada de forma robusta. Ver RESEARCH_LOG Sesión 8.
 - [x] Baselines T2.2b **confirmados con fuentes 2026**: LightGBM + ETS/Holt-Winters (no ARIMA/Prophet — quedan por detrás en la evidencia). Pregunta de la Sesión 7 resuelta.
 - [x] `docs/DATA.md` — diccionario de datos completo y verificado (schema, granularidad, plan de uso por fase, limitaciones). Nuevos gotchas encontrados: 8 tiendas de apertura tardía (una con solo ~4 meses de historia), huecos en transactions.csv, festivos transferidos/duplicados en holidays_events.csv.
+- [x] **T1.1 cerrada**: `data/processed/stores_silos.csv` generado (Propuesta 2, confirmada por el autor). Ver `src/04_generate_silos.py`.
+- [x] Granularidad familia×semana (vs. SKU×día) justificada y documentada con 4 argumentos + limitación reconocida (RESEARCH_LOG Sesión 9) — reutilizable directamente en la memoria.
+- [x] `notebooks/01_refresher_mlp_embeddings_fedavg.ipynb` — MLP desde cero (94,7% menos error que regresión en datos no lineales), embeddings visualizados, simulación de FedAvg con 3 silos sintéticos (federado empata con el mejor local y bate ampliamente a los peores). Material de apoyo, ejecutado sin errores.
+- [x] Entorno ampliado: `torch`, `lightgbm`, `statsmodels` instalados y en `requirements.txt`.
+- [x] **T1.2 cerrada**: `data/processed/tienda_familia_semana.parquet` — agregación semanal + petróleo + festivos (nacional/regional/local, con `transferred` tratado) + día de pago + recorte de apertura tardía. 0 nulos, venta total verificada idéntica al original. Ver `src/05_build_modeling_dataset.py`.
 
-## ▶️ PRÓXIMA TAREA — T1.1 (Fase 1)
+## ▶️ PRÓXIMA TAREA — T1.3 (Fase 1)
 
-**Asignación final de silos por formato.** GATE ejecutado (2026-07-14) con `src/03_silo_assignment_gate.py`.
-Counts reales por tipo:
+**T1.1 y T1.2 cerradas (2026-07-15).**
+- `data/processed/stores_silos.csv` — silos Propuesta 2 (`src/04_generate_silos.py`).
+- `data/processed/tienda_familia_semana.parquet` — dataset de modelado, 399.762 filas, 0 nulos,
+  venta total verificada (`src/05_build_modeling_dataset.py`, detalle en `RESEARCH_LOG.md` Sesión 11).
 
-| Tipo | Tiendas | Venta media/tienda |
-|---|---|---|
-| A | 9 | 39.227.094 |
-| D | 18 | 19.504.628 |
-| B | 8 | 18.157.579 |
-| E | 4 | 14.955.609 |
-| C | 15 | 10.962.316 |
-
-Dos propuestas sobre la mesa (**pendiente de que el autor elija una, o proponga otra**):
-- **Propuesta 1** (2/1/2, original): Grande=A+D (27 t.) · Mediano=B (8 t.) · Pequeño=E+C (19 t.)
-- **Propuesta 2** (1/2/2, recomendada — respeta el salto natural A→D, mayor que D→B): Grande=A (9 t.) · Mediano=D+B (26 t.) · Pequeño=E+C (19 t.)
-
-Una vez el autor elija:
-1. Generar `data/processed/stores_silos.csv` con `store_nbr, city, state, type, cluster, silo`.
-2. Imprimir el reparto final y confirmar que ningún silo queda con muy pocas tiendas.
-
-Después seguir con T1.2 (dataset tienda×familia×semana) — ver `docs/PLAN.md`.
+**T1.3 — Corte temporal walk-forward** (train/val/test por fecha, **por silo**). Ver `docs/PLAN.md`.
+Nota: hay 10.197 filas (2,55%) de semanas parciales (`dias_con_dato`&lt;7) en los bordes —
+decidir en T1.4 si se excluyen, se ponderan, o se dejan (pendiente, ver Sesión 11 del RESEARCH_LOG).
 
 ## ⏳ Pendiente de decisión / acción del usuario
 
-- **Elegir Propuesta 1 vs. 2 de agrupamiento de silos** (arriba) — bloquea T1.1 y toda la Fase 1.
-- **¿Incluir ARIMA/Prophet además de ETS/LightGBM en los baselines de T2.2b?** (pregunta abierta de la Sesión 7 del RESEARCH_LOG, reenfoque técnico+negocio).
 - **Regenerar el token de Kaggle** (se pegó en un chat; higiene). Al hacerlo, actualizar `C:\Users\alefl\.kaggle\access_token`.
 - **Cuenta de Azure for Students** (verificar con correo UNAV) — necesaria para la Fase 4 (Azure ML). No bloquea las Fases 1-3.
 

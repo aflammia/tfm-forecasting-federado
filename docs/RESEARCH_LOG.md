@@ -433,6 +433,203 @@ resultados en `docs/DATA.md`.
 
 ---
 
+## Sesión 9 — Confirmaciones del autor: silos, baselines, y justificación de granularidad
+
+**Fecha:** 2026-07-15
+**Tipo:** decisiones de diseño confirmadas + cierre de T1.1
+**Objetivo:** registrar, con su justificación completa (material directamente reutilizable en
+la memoria), las tres decisiones que el autor confirmó tras revisar la evidencia de las
+Sesiones 7-8.
+
+### Decisión 1 — Partición de silos: Propuesta 2, confirmada
+
+El autor confirma la Propuesta 2 (Grande=tipo A · Mediano=tipos D+B · Pequeño=tipos E+C),
+validada en la Sesión 8 por dos métricas independientes (venta total y tráfico de clientes,
+correlación 0,91, ambas coinciden en la misma frontera natural). Ejecutado en
+`src/04_generate_silos.py`, que genera `data/processed/stores_silos.csv`. Reparto final:
+
+| Silo | Tipos | Nº tiendas |
+|---|---|---|
+| Grande | A | 9 |
+| Mediano | D, B | 26 |
+| Pequeño | E, C | 19 |
+
+**T1.1 queda cerrada.**
+
+### Decisión 2 — Baselines de la Fase 2 (T2.2b): LightGBM + ETS/Holt-Winters, sin ARIMA/Prophet
+
+Confirmado tras la investigación de la Sesión 7/8: la evidencia de 2026 muestra que LightGBM
+con features temporales es "una apuesta segura por defecto" en producción, y que ETS/Holt-Winters
+es "uno de los modelos más desplegados en la industria, particularmente en planificación de
+demanda de retail" — mientras que ARIMA y Prophet quedan sistemáticamente por detrás en
+benchmarks recientes. Añadir ARIMA/Prophet no aportaría más rigor a RQ2 y sí más tiempo de
+desarrollo, con el plazo de &lt;3 meses ya comprometido por el reenfoque de negocio (Sesión 7).
+
+### Decisión 3 — Granularidad: familia × semana, no SKU × día (justificación para la memoria)
+
+**Contexto y honestidad metodológica:** en una discusión previa a la descarga de datos, se
+había planteado el nivel de SKU como preferible para el valor de negocio (permite decisiones
+de surtido producto a producto, p. ej. qué referencia concreta descontinuar). Al inspeccionar
+el dataset realmente descargado (`store-sales-time-series-forecasting`, la versión "Getting
+Started" que Kaggle deriva del Favorita original de 2017) se confirmó que **no incluye
+`item_nbr`** — solo 33 familias agregadas (`docs/DATA.md`, sección 2.1). La competición
+original de 2017 sí tenía nivel de ítem (~4.000 productos), pero es ~40 veces más pesada
+(~125M filas) y no es la que se descargó. Esta sección documenta, con conocimiento de causa,
+la decisión de **no** volver a cambiar de dataset y mantener familia × semana.
+
+**Justificación (cuatro argumentos):**
+
+1. **Ortogonalidad con las preguntas de investigación centrales.** RQ1 y RQ2 preguntan si el
+   *mecanismo de entrenamiento* (federado vs. local/centralizado/convencional) mejora la
+   previsión — esa pregunta se responde igual de bien a nivel de familia que de SKU. La
+   granularidad del objetivo no determina la respuesta sobre si federar ayuda.
+2. **Coste y riesgo de alcance.** Pasar a SKU multiplicaría por ~120 el número de series por
+   tienda (33 familias → ~4.000 ítems) e introduciría demanda intermitente (muchos ceros por
+   producto y día), un problema de investigación distinto (métodos tipo Croston) fuera del
+   alcance de este TFM. Con &lt;3 meses de plazo, es un riesgo real de no completar ni la
+   comparación federada ni los capítulos de negocio ya comprometidos (Fase 4b).
+3. **Calidad de la señal y rigor de la comparación.** A nivel familia-semana la serie es mucho
+   menos ruidosa que SKU-día; menos ruido de fondo permite atribuir con más confianza (mayor
+   poder estadístico en el test de Wilcoxon) las diferencias de WMAPE entre condiciones al
+   mecanismo de entrenamiento, y no a varianza intrínseca de series dispersas.
+4. **Relevancia de negocio de la semana como ciclo.** La planificación de pedidos y personal en
+   retail es mayoritariamente semanal, no diaria — la granularidad temporal elegida coincide
+   con el ciclo de decisión real de un gerente de tienda, no es solo una simplificación técnica.
+
+**Limitación reconocida y mitigación (a incluir explícitamente en el capítulo de limitaciones):**
+se pierde la capacidad de decisión a nivel de producto individual. Mitigación: la arquitectura
+(embedding de familia, Sesión 5/10) es estructuralmente el mecanismo de "categoría como
+respaldo estadístico" que permitiría extender el sistema a SKU en trabajo futuro — un producto
+nuevo heredaría el embedding de su familia como punto de partida (shrinkage). El capítulo de
+valor de negocio (T4b.2) debe matizar que la cifra en € calculada corresponde a decisiones de
+reposición agregada por familia, no a decisiones de surtido SKU a SKU.
+
+### Estado de las tres decisiones
+
+**Cerradas y confirmadas por el autor (2026-07-15).** No quedan preguntas abiertas de la
+Sesión 7. Próxima tarea: T1.2 (pipeline de datos de modelado).
+
+---
+
+## Sesión 10 — Notebook de apoyo: MLP + Embeddings + FedAvg desde cero
+
+**Fecha:** 2026-07-15
+**Notebook:** `notebooks/01_refresher_mlp_embeddings_fedavg.ipynb`
+**Objetivo:** material de apoyo pedagógico (no resultado de investigación) — construir con
+código real y ejecutado las tres piezas de la arquitectura del proyecto (MLP, embeddings,
+FedAvg) por separado, para entender cada una antes de implementarlas sobre los datos reales.
+
+### Método
+
+1. Instalación de `torch`, `lightgbm`, `statsmodels` en el entorno (añadidas a `requirements.txt`,
+   necesarias también para T1.2 en adelante y para T2.2b).
+2. Generación programática del notebook (24 celdas) con `nbformat`, en 4 secciones:
+   - **MLP desde cero** (numpy, forward+backward manual, un hidden layer): regresión lineal vs.
+     MLP sobre datos sintéticos con relación no lineal (`y = sin(x)·2 + 0.3x + ruido`).
+   - **Embeddings** (PyTorch `nn.Embedding`, 2D para visualización directa): 6 categorías
+     sintéticas con "efecto verdadero" no ordinal, visualización del espacio aprendido.
+   - **MLP + embeddings juntos** (PyTorch): arquitectura de juguete con la misma forma que la
+     Sesión 5 (features continuas + embedding de tienda + embedding de familia).
+   - **FedAvg simulado**: datos sintéticos con 3 silos de escala muy distinta (imitando
+     Grande/Mediano/Pequeño real: 40/18/8), comparación explícita local (A) vs. federado (D).
+3. Ejecución completa con `jupyter nbconvert --execute`.
+
+### Resultados
+
+- **MLP vs. regresión lineal:** MSE 0,086 (MLP) vs. 1,633 (regresión) — **94,7% menos error**
+  en datos con relación no lineal a propósito.
+- **Embedding:** pérdida de entrenamiento 26,65 → 0,18. Verificación visual: las categorías con
+  efecto verdadero similar (BEVERAGES, DAIRY, BREAD, efecto real ≈4,5-5,0) quedaron próximas en
+  el espacio de embedding 2D, sin habérselo indicado al modelo explícitamente.
+- **FedAvg (25 rondas), MSE en validación conjunta (mezcla de los 3 silos):**
+
+| Modelo | MSE validación global |
+|---|---|
+| Local — Grande | 122,91 |
+| Local — Mediano | 209,54 |
+| Local — Pequeño | 534,75 |
+| **Federado** | **123,53** |
+
+0 errores de ejecución en las 14 celdas de código.
+
+### Interpretación
+
+El resultado es más matizado (y más honesto) que "el federado gana siempre": el modelo
+federado **empata con el mejor de los tres modelos locales** (Grande, la diferencia de 0,6 es
+ruido) y **reduce drásticamente el error frente a los otros dos** (41% menos que Mediano, 77%
+menos que Pequeño). Lectura para la memoria: ningún silo sabe de antemano si será el "afortunado"
+(como Grande, cuyo modelo local generaliza sorprendentemente bien) o el "desafortunado" (como
+Pequeño); federar ofrece la garantía del mejor caso sin el riesgo del peor — un argumento de
+**reducción de riesgo**, no solo de precisión media, que es directamente reutilizable en el
+capítulo de valor de negocio (T4b.2) y en la comparación con data clean rooms (T4b.1).
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/jupyter-nbconvert.exe --to notebook --execute --ExecutePreprocessor.kernel_name=tfmfl notebooks/01_refresher_mlp_embeddings_fedavg.ipynb --output 01_refresher_mlp_embeddings_fedavg.ipynb
+```
+
+---
+
+## Sesión 11 — T1.2: construcción del dataset de modelado
+
+**Fecha:** 2026-07-15
+**Script:** `src/05_build_modeling_dataset.py`
+**Objetivo:** construir el dataset tienda×familia×semana que alimentará todas las condiciones
+experimentales (A-F), con las covariables y correcciones ya identificadas en `docs/DATA.md`.
+
+### Método
+
+1. **Recorte por apertura tardía:** se elimina, por tienda, todo registro anterior a su primera
+   venta &gt; 0 (las 8 tiendas identificadas en la Sesión 8).
+2. **Agregación:** `groupby(store_nbr, family, week_start)` — semana = lunes ISO de cada fecha.
+   `ventas` = suma; `onpromotion` = media; se guarda además `dias_con_dato` (nº de días reales
+   agregados esa semana, para detectar semanas parciales en los bordes).
+3. **Unión con `stores_silos.csv`** (silo, ciudad, provincia, tipo).
+4. **Petróleo:** calendario diario completo → `ffill`+`bfill` de los huecos (fines de semana
+   bursátiles) → media semanal.
+5. **Festivos**, con el tratamiento decidido en `docs/DATA.md`: se excluyen los festivos con
+   `transferred=True` (no se observan esa fecha) y el tipo `Work Day` (recuperación de puente,
+   no es festivo). Flags separados por nivel: `es_festivo_nacional` (aplica a todas las filas
+   de esa semana), `es_festivo_regional` (cruce por `state`), `es_festivo_local` (cruce por `city`).
+6. **Calendario:** `semana_del_anio`, `mes`, y `semana_con_dia_pago` (la semana contiene el
+   día 15 o el último día del mes — efecto de nómina documentado en Ecuador, Sesión 3).
+
+### Resultados
+
+| Verificación | Resultado |
+|---|---|
+| Filas eliminadas por apertura tardía | 222.057 (7,40% del total) |
+| Filas finales | 399.762 (54 tiendas × 33 familias × hasta 242 semanas) |
+| Reparto por silo | Grande 64.482 · Mediano 192.687 · Pequeño 142.593 |
+| Nulos en el dataset final | **0** (en las 17 columnas) |
+| Venta total original vs. dataset final | **1.073.644.952 = 1.073.644.952 (idéntica)** |
+| Filas con festivo nacional / regional / local | 107.646 / 957 / 7.755 |
+| Filas en semana con día de pago | 184.899 (46,25%) |
+| Semanas parciales (`dias_con_dato` &lt; 7) | 10.197 (2,55%) — bordes del dataset o de la apertura de cada tienda |
+
+### Interpretación
+
+La igualdad exacta entre la venta total original y la del dataset agregado confirma que el
+recorte por apertura tardía solo eliminó filas con venta 0 (por construcción, ya que se filtra
+todo lo anterior a la primera venta &gt;0) — **no se perdió ninguna unidad de venta real**, es
+una verificación de integridad, no una casualidad. La proporción de semanas con día de pago
+(46,25%) es coherente con la aritmética esperada (~2 días de pago al mes sobre ~4,3 semanas/mes).
+
+### Decisión pendiente para T1.4 (no se resuelve aquí)
+
+Las semanas parciales (2,55% de las filas) quedan señaladas vía `dias_con_dato` pero **no se
+excluyen ni se ponderan todavía** — se decidirá en T1.4 (feature engineering) si se descartan,
+se ponderan por `dias_con_dato/7` en la función de pérdida, o se dejan tal cual.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/05_build_modeling_dataset.py
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown
