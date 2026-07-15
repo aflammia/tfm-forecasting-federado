@@ -630,6 +630,102 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/05_build_modeling_dataset.
 
 ---
 
+## Sesión 12 — Qué significa realmente `type` (honestidad sobre una variable no documentada)
+
+**Fecha:** 2026-07-15
+**Objetivo:** documentar con precisión el significado (y los límites de lo que se conoce) de la
+variable `type` de `stores.csv`, usada como base de la partición en silos.
+
+### Método
+
+Búsqueda de la documentación oficial de Kaggle/Corporación Favorita sobre `stores.csv`, contraste
+con análisis exploratorios independientes de la comunidad, y verificación propia de si `cluster`
+(sí documentado como "agrupación de tiendas similares") anida dentro de `type` mediante tabla
+cruzada `pd.crosstab(type, cluster)`.
+
+### Resultados
+
+- **La documentación oficial de Kaggle no define `type`.** Solo describe `cluster` explícitamente.
+  `type` es una etiqueta de una letra (A-E) sin criterio de asignación revelado por Corporación
+  Favorita ni por Kaggle.
+- **Consenso de la comunidad** (múltiples EDA independientes en Kaggle/Medium): `type` se interpreta
+  como una proxy de tamaño/formato de tienda, inferido empíricamente — no confirmado oficialmente.
+  Los tipos A y D concentran el mayor volumen de ventas; el tipo E es el menos frecuente (4 tiendas).
+  Coincide con el orden hallado de forma independiente en la Sesión 4 (A>D>B>E>C).
+- **Anidamiento `cluster` dentro de `type`:** 16 de los 17 clusters caen íntegramente dentro de un
+  único `type` (solo el cluster 10 mezcla tipos D y E, mayoritariamente E). Evidencia de que
+  `cluster` es una subdivisión más fina *dentro* de `type`, no una clasificación independiente.
+
+### Interpretación y decisión
+
+Se documenta `type` en la memoria como **una clasificación de formato/tamaño de tienda no revelada
+oficialmente**, cuyo uso en este TFM se justifica no por confiar ciegamente en la etiqueta, sino
+porque **se validó de forma independiente con datos propios** (venta media y tráfico de clientes,
+Sesión 8) antes de construir los silos sobre ella. Se añade el hallazgo del anidamiento con
+`cluster` como evidencia adicional de que `type` captura una estructura real y estable, no arbitraria.
+
+---
+
+## Sesión 13 — T1.3: corte temporal walk-forward + exclusión de semanas parciales
+
+**Fecha:** 2026-07-15
+**Script:** `src/06_temporal_split.py`
+**Objetivo:** particionar el dataset en train/val/test por fecha (walk-forward, sin aleatoriedad),
+y cerrar la decisión pendiente de la Sesión 11 sobre las semanas parciales de los bordes.
+
+### Decisión — semanas parciales: EXCLUIDAS
+
+**Confirmado por el autor (2026-07-15).** Se eliminan las 10.197 filas (2,55% del dataset) con
+`dias_con_dato < 7` — semanas incompletas en los bordes del histórico de cada tienda (por el
+límite del dataset o por el recorte de apertura tardía, Sesión 11). **Justificación para la
+memoria:** una semana con, p. ej., solo 2 días de datos no es comparable a una semana completa
+— su venta agregada infravalora sistemáticamente la demanda real de esa semana, introduciendo
+un sesgo (no ruido aleatorio) que ninguna de las condiciones experimentales podría corregir por
+sí sola. Excluirlas es preferible a ponderarlas, por simplicidad y porque es solo un 2,55% de
+las filas — no se pierde una fracción relevante de información.
+
+### Método — corte temporal
+
+1. Sobre el dataset ya sin semanas parciales, se define el corte por **fecha global** (misma
+   frontera para las 3 silos — el corte particiona por tiempo, no por silo):
+   **test = últimas 8 semanas completas · val = las 8 anteriores · train = el resto.**
+2. Verificación de ausencia de fuga: `max(train.week_start) < min(val.week_start)` y
+   `max(val.week_start) < min(test.week_start)`.
+3. Verificación de cobertura por silo en val/test (que ningún silo se quede sin representación
+   suficiente en los conjuntos de evaluación).
+
+### Resultados
+
+| Split | Desde | Hasta | Nº semanas | Filas |
+|---|---|---|---|---|
+| Train | 2013-01-07 | 2017-04-17 | 220 | 361.053 |
+| Val | 2017-04-24 | 2017-06-12 | 8 | 14.256 |
+| Test | 2017-06-19 | 2017-08-07 | 8 | 14.256 |
+
+Verificación formal de fronteras: **train &lt; val &lt; test, sin solape** (aserción automática en
+el script, superada).
+
+**Cobertura por silo en val y test** — coincide de forma exacta con nº_tiendas × 33 familias × 8
+semanas para los tres silos (Grande 9×33×8=2.376 ✓ · Mediano 26×33×8=6.864 ✓ · Pequeño
+19×33×8=5.016 ✓), confirmando que **ninguna tienda falta** en el periodo de evaluación reciente
+— si alguna tienda hubiera cerrado antes de agosto de 2017, el recuento no habría cuadrado.
+
+Total: 389.565 filas conservadas (97,4% de las 399.762 de T1.2).
+
+### Salidas
+
+- `data/processed/dataset_modelado.parquet` — dataset final con columna `split`.
+- `configs/split_config.json` — fechas de corte exactas, para reproducibilidad y para que
+  cualquier script posterior (baselines, condiciones A-F) lea el mismo corte sin recalcularlo.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/06_temporal_split.py
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

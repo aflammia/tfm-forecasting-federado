@@ -63,7 +63,10 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
   0 nulos, venta total verificada idéntica al original. Script: `src/05_build_modeling_dataset.py`.
   Detalle completo (metodología, verificaciones, decisión pendiente sobre semanas parciales) en
   `RESEARCH_LOG.md` Sesión 11.
-- **T1.3** Corte temporal walk-forward por fecha (train/val/test). Guardar el corte en `configs/`.
+- **T1.3** ✅ **Cerrada (2026-07-15).** Walk-forward: train 220 semanas (2013-01-07→2017-04-17) ·
+  val 8 semanas (2017-04-24→2017-06-12) · test 8 semanas (2017-06-19→2017-08-07). Semanas parciales
+  excluidas (2,55%). Verificado: sin fuga temporal, cobertura completa de las 54 tiendas en val/test.
+  `data/processed/dataset_modelado.parquet` + `configs/split_config.json`. Detalle en `RESEARCH_LOG.md` Sesión 13.
 - **T1.4** Feature engineering: lags (1,2,4,8 semanas), medias móviles, promo, calendario, festivos, oil.
   Documentar cada feature. Normalización por serie (para manejar la heterogeneidad de escala entre silos).
 - **T1.5** Tests de datos (pytest): sin fugas temporales, sin NaN en features de entrada, rangos de fecha correctos, familias/tiendas esperadas.

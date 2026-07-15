@@ -1,0 +1,21 @@
+{
+  "fecha_generacion": "2026-07-15",
+  "semanas_parciales_excluidas": 10197,
+  "n_semanas_test": 8,
+  "n_semanas_val": 8,
+  "train": {
+    "desde": "2013-01-07",
+    "hasta": "2017-04-17",
+    "n_semanas": 220
+  },
+  "val": {
+    "desde": "2017-04-24",
+    "hasta": "2017-06-12",
+    "n_semanas": 8
+  },
+  "test": {
+    "desde": "2017-06-19",
+    "hasta": "2017-08-07",
+    "n_semanas": 8
+  }
+}

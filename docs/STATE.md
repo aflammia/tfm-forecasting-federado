@@ -1,9 +1,10 @@
 # STATE.md — Estado actual y próxima tarea
 
 > Documento vivo. **Actualízalo al completar cada tarea** (marca hecho, anota lo aprendido).
-> Última actualización: 2026-07-15 — **T1.1 y T1.2 cerradas.** Silos (Propuesta 2), baselines T2.2b y
-> granularidad familia/semana confirmados y documentados (Sesión 9); notebook 01 MLP+embeddings+FedAvg
-> (Sesión 10); dataset de modelado construido y verificado, 0 nulos (Sesión 11). Próxima: T1.3.
+> Última actualización: 2026-07-15 — **T1.1, T1.2 y T1.3 cerradas.** Silos, baselines T2.2b y
+> granularidad confirmados (Sesión 9); notebook 01 (Sesión 10); dataset de modelado (Sesión 11);
+> variable `type` documentada con honestidad (Sesión 12); split walk-forward verificado sin fuga,
+> semanas parciales excluidas (Sesión 13). Próxima: T1.4 (feature engineering — lags, medias móviles).
 
 ## ✅ Hecho
 
@@ -31,16 +32,20 @@
 - [x] Entorno ampliado: `torch`, `lightgbm`, `statsmodels` instalados y en `requirements.txt`.
 - [x] **T1.2 cerrada**: `data/processed/tienda_familia_semana.parquet` — agregación semanal + petróleo + festivos (nacional/regional/local, con `transferred` tratado) + día de pago + recorte de apertura tardía. 0 nulos, venta total verificada idéntica al original. Ver `src/05_build_modeling_dataset.py`.
 
-## ▶️ PRÓXIMA TAREA — T1.3 (Fase 1)
+## ▶️ PRÓXIMA TAREA — T1.4 (Fase 1)
 
-**T1.1 y T1.2 cerradas (2026-07-15).**
-- `data/processed/stores_silos.csv` — silos Propuesta 2 (`src/04_generate_silos.py`).
-- `data/processed/tienda_familia_semana.parquet` — dataset de modelado, 399.762 filas, 0 nulos,
-  venta total verificada (`src/05_build_modeling_dataset.py`, detalle en `RESEARCH_LOG.md` Sesión 11).
+**T1.1, T1.2 y T1.3 cerradas (2026-07-15).**
+- `data/processed/stores_silos.csv` — silos Propuesta 2.
+- `data/processed/tienda_familia_semana.parquet` — agregación semanal (399.762 filas, 0 nulos).
+- `data/processed/dataset_modelado.parquet` — con columna `split` (train/val/test), semanas
+  parciales excluidas, sin fuga temporal verificada. `configs/split_config.json` con las fechas exactas.
 
-**T1.3 — Corte temporal walk-forward** (train/val/test por fecha, **por silo**). Ver `docs/PLAN.md`.
-Nota: hay 10.197 filas (2,55%) de semanas parciales (`dias_con_dato`&lt;7) en los bordes —
-decidir en T1.4 si se excluyen, se ponderan, o se dejan (pendiente, ver Sesión 11 del RESEARCH_LOG).
+**T1.4 — Feature engineering**: lags (1/2/4/8 semanas), medias móviles, y preparar las variables
+categóricas (familia, tienda) para los embeddings. Ver `docs/PLAN.md` y la arquitectura ya
+definida en `RESEARCH_LOG.md` Sesión 5/10. Ojo: los lags deben calcularse por serie
+(tienda×familia) en orden temporal, y respetar el `split` para no filtrar información de
+val/test hacia atrás en el tiempo de forma incorrecta (aunque los lags en sí son pasado→futuro,
+hay que verificar con un test que ningún lag "mire" hacia adelante).
 
 ## ⏳ Pendiente de decisión / acción del usuario
 
