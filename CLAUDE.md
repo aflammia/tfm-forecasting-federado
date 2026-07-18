@@ -67,8 +67,18 @@ edites entradas cerradas; si algo se corrige, añade una entrada nueva que lo re
 
 Este cuaderno es la materia prima de los capítulos de Metodología y Resultados de la memoria.
 
+## Regla de citación (OBLIGATORIA)
+
+Cada vez que se investigue algo apoyándose en una fuente externa (paper, dataset, documentación
+técnica, artículo) y se cite en `RESEARCH_LOG.md`, **hay que añadir también su entrada completa en
+`docs/REFERENCIAS.md`, en formato APA (7.ª edición)**, en el momento — no dejarlo para el final.
+Antes de dar por buena una cita, **verificar los datos exactos** (autores, año, título, venue) con
+una búsqueda si no se tienen con certeza — nunca inventar ni aproximar una referencia. Este archivo
+se copia directamente a la bibliografía de la memoria.
+
 ## Estado y próximos pasos
 
 Ver **`docs/STATE.md`** — documento vivo, actualízalo al completar cada tarea.
 Ver **`docs/RESEARCH_LOG.md`** — cuaderno de laboratorio, añade una entrada por cada paso con resultados.
 Ver **`docs/DATA.md`** — diccionario de datos: qué contiene cada fichero, granularidad, gotchas conocidos (tiendas de apertura tardía, festivos transferidos, etc.) y el plan de uso de los datos mapeado a cada fase. Léelo antes de tocar cualquier fichero de `data/raw/`.
+Ver **`docs/REFERENCIAS.md`** — bibliografía APA de todas las fuentes externas citadas, lista para la memoria.
