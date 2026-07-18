@@ -757,6 +757,48 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/07_report_figures.py
 
 ---
 
+## Sesión 15 — Estado del arte de la partición en silos (resumen para la memoria) + uso de `cluster`
+
+**Fecha:** 2026-07-18
+
+### Qué hace la literatura de FL para retail (resumen conciso)
+
+- **Ningún paper revisado usa cadenas competidoras reales como silos** — el dato no existe público (es
+  información comercialmente sensible que ninguna empresa publica).
+- **PA-CFL** (2025, el más comparable a este TFM: FL para forecasting de ventas retail heterogéneo) usa
+  **un único dataset de una empresa (DataCo)**, particionado en **14 regiones geográficas** como
+  "clientes" federados — no 14 empresas distintas.
+- **Conclusión:** particionar un único dataset real por un eje que genere heterogeneidad controlada
+  **es la metodología estándar y aceptada del campo**, no una simplificación exclusiva de este TFM.
+  Fuente: [PA-CFL (arXiv 2503.12220)](https://arxiv.org/html/2503.12220v2).
+
+### Nuestra decisión y por qué es válida
+
+Se parte Corporación Favorita (una cadena) por **formato de tienda** en 3 silos — mismo principio que
+PA-CFL (partir por región), pero con una diferencia a nuestro favor: **probamos primero partir por
+región** (el eje "de libro") y encontramos heterogeneidad casi nula (JS=0,005, Sesión 4); el formato fue
+la alternativa que sí dio heterogeneidad real y medible. Nuestra elección está, por tanto, respaldada
+por evidencia propia, no solo por convención.
+
+### Qué haría falta en un contexto de vida real
+
+En un despliegue real, los silos serían **cadenas** (Mercadona, DIA, Alcampo), cada una con formatos
+mezclados internamente; el formato pasaría de ser el eje del silo a ser **una variable/embedding más**
+del modelo. El mecanismo de FedAvg no cambia: solo cambia qué frontera de datos representa cada
+participante. Esta transferibilidad se documenta como limitación reconocida, no como fallo de validez.
+
+### `cluster`: por qué no se usa como variable de entrenamiento
+
+17 clusters sobre 54 tiendas → media de 3,18 tiendas/cluster, **4 clusters con una sola tienda** (5, 12,
+16, 17), 7 de 17 con ≤2 tiendas. Un embedding necesita varios miembros por categoría para generalizar;
+con esta dispersión, la mayoría de clusters no aportarían señal compartida, solo memorización de casos
+individuales. **Uso decidido:** no como input de entrenamiento; sí como **validación cualitativa
+posterior** (Fase 3/6) — proyectar el embedding de tienda aprendido por el modelo (PCA 2D) y colorear
+por `cluster`, para comprobar si el modelo redescubre por su cuenta la agrupación que Favorita ya había
+hecho con criterios no revelados (evidencia externa de que el modelo aprende estructura real).
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown
