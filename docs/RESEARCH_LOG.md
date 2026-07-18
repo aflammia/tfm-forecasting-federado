@@ -799,6 +799,70 @@ hecho con criterios no revelados (evidencia externa de que el modelo aprende est
 
 ---
 
+## Sesión 16 — T1.4: ingeniería de variables
+
+**Fecha:** 2026-07-18
+**Script:** `src/08_feature_engineering.py`
+**Objetivo:** añadir variables autorregresivas (lags, medias móviles), el objetivo transformado, y
+la codificación de categóricas para los embeddings — sobre el dataset ya particionado (T1.3).
+
+### Método
+
+1. Ordenación estricta por (`store_nbr`, `family`, `week_start`) antes de cualquier cálculo.
+2. Por serie (tienda×familia): `lag_1`, `lag_2`, `lag_4`, `lag_8`; medias móviles de 4 y 8 semanas y
+   desviación de 4 semanas, calculadas **excluyendo la semana actual** (`shift(1)` antes de `rolling`)
+   para que ninguna use información de la semana que se predice.
+3. `log_ventas = log(1+ventas)` (objetivo transformado, justificado en Sesión 5).
+4. Codificación de categóricas: `family_id` (0-32) y `store_id` (0-53), enteros listos para las
+   tablas de embedding de la arquitectura (Sesión 5/10).
+5. **Verificación anti-fuga:** muestra aleatoria de 500 filas comprobando que `lag_1` de la semana W
+   coincide exactamente con la venta real de la semana W-1 de esa misma serie.
+
+### Resultados
+
+Verificación anti-fuga: **0 discrepancias en 500 filas** comprobadas.
+
+Filas con historial insuficiente (NaN en variables autorregresivas, inicio de cada serie): 14.256 de
+389.565 (3,66%), casi todas en train (13.992) — esperable, es el "arranque" natural de cada serie.
+
+**Hallazgo relevante — corrige una afirmación de la Sesión 13:** de las 264 filas con NaN que caen en
+`val` (no en train), **las 264 pertenecen íntegramente a la tienda 52** (33 familias × 8 semanas). La
+tienda 52 abrió el 2017-04-20 — apenas 4 días antes de que empiece el periodo de validación
+(2017-04-24) — y no acumula ni una semana de historial previo para calcular lags de hasta 8 semanas.
+**Para el periodo de test (desde 2017-06-19) la tienda 52 sí tiene historial suficiente y aparece
+completa.**
+
+**Corrección formal:** la Sesión 13 afirmó "cobertura exacta de las 54 tiendas confirmada en val/test"
+— esto era cierto en ese momento (antes de calcular lags), pero **deja de serlo tras la ingeniería de
+variables**: `val` cubre 53 tiendas (falta la 52), `test` cubre las 54. Se documenta aquí para que la
+memoria no arrastre la afirmación desactualizada.
+
+| Split | Tiendas cubiertas | Filas finales |
+|---|---|---|
+| Train | 54 | 347.061 |
+| Val | **53** (sin la tienda 52) | 13.992 |
+| Test | 54 | 14.256 |
+
+### Interpretación y decisión
+
+Se eliminan las filas sin historial suficiente (no se puede entrenar ni evaluar sin lags). La ausencia
+de la tienda 52 en `val` es una limitación menor y explicable (apertura reciente, un caso aislado de 1
+de 54 tiendas) — se documenta con transparencia en vez de forzar un relleno artificial de los lags
+faltantes, que introduciría datos inventados. No afecta a `test`, que es el conjunto de evaluación
+final del TFM.
+
+### Salidas
+- `data/processed/dataset_features.parquet` — dataset final con variables autorregresivas, objetivo
+  transformado y categóricas codificadas. 375.309 filas (96,3% del dataset de T1.3).
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/08_feature_engineering.py
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

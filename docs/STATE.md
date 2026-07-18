@@ -1,10 +1,12 @@
 # STATE.md — Estado actual y próxima tarea
 
 > Documento vivo. **Actualízalo al completar cada tarea** (marca hecho, anota lo aprendido).
-> Última actualización: 2026-07-15 — **T1.1, T1.2 y T1.3 cerradas.** Silos, baselines T2.2b y
-> granularidad confirmados (Sesión 9); notebook 01 (Sesión 10); dataset de modelado (Sesión 11);
-> variable `type` documentada con honestidad (Sesión 12); split walk-forward verificado sin fuga,
-> semanas parciales excluidas (Sesión 13). Próxima: T1.4 (feature engineering — lags, medias móviles).
+> Última actualización: 2026-07-18 — **T1.1 a T1.4 cerradas.** Estado del arte de la partición en
+> silos documentado con cita a PA-CFL (Sesión 15); `cluster` descartado como feature de entrenamiento
+> (17 clusters/54 tiendas, 4 singletons — Sesión 15); T1.4 cerrada con verificación anti-fuga (0
+> discrepancias) y una corrección importante: `val` cubre 53 tiendas, no 54 (falta la tienda 52 por
+> apertura reciente — Sesión 16). Sistema de citas APA creado (`docs/REFERENCIAS.md`). Próxima: T1.4b
+> (decidir normalización) y T1.5 (tests de datos).
 
 ## ✅ Hecho
 
@@ -32,20 +34,23 @@
 - [x] Entorno ampliado: `torch`, `lightgbm`, `statsmodels` instalados y en `requirements.txt`.
 - [x] **T1.2 cerrada**: `data/processed/tienda_familia_semana.parquet` — agregación semanal + petróleo + festivos (nacional/regional/local, con `transferred` tratado) + día de pago + recorte de apertura tardía. 0 nulos, venta total verificada idéntica al original. Ver `src/05_build_modeling_dataset.py`.
 
-## ▶️ PRÓXIMA TAREA — T1.4 (Fase 1)
+## ▶️ PRÓXIMA TAREA — T1.4b y T1.5 (Fase 1, cierre)
 
-**T1.1, T1.2 y T1.3 cerradas (2026-07-15).**
+**T1.1 a T1.4 cerradas (2026-07-18).**
 - `data/processed/stores_silos.csv` — silos Propuesta 2.
-- `data/processed/tienda_familia_semana.parquet` — agregación semanal (399.762 filas, 0 nulos).
-- `data/processed/dataset_modelado.parquet` — con columna `split` (train/val/test), semanas
-  parciales excluidas, sin fuga temporal verificada. `configs/split_config.json` con las fechas exactas.
+- `data/processed/dataset_modelado.parquet` — con columna `split`, sin fuga temporal.
+- `data/processed/dataset_features.parquet` — **el dataset final**: lags, medias móviles, `log_ventas`,
+  `family_id`/`store_id` codificados. 375.309 filas. **Ojo: `val` tiene 53 tiendas (no 54) — falta la
+  tienda 52, ver `RESEARCH_LOG.md` Sesión 16.**
 
-**T1.4 — Feature engineering**: lags (1/2/4/8 semanas), medias móviles, y preparar las variables
-categóricas (familia, tienda) para los embeddings. Ver `docs/PLAN.md` y la arquitectura ya
-definida en `RESEARCH_LOG.md` Sesión 5/10. Ojo: los lags deben calcularse por serie
-(tienda×familia) en orden temporal, y respetar el `split` para no filtrar información de
-val/test hacia atrás en el tiempo de forma incorrecta (aunque los lags en sí son pasado→futuro,
-hay que verificar con un test que ningún lag "mire" hacia adelante).
+**T1.4b — Normalización:** decidir si las features continuas (lags, medias móviles) necesitan
+escalado antes de entrar al MLP (los baselines LightGBM/ETS no lo necesitan). Dado que ya se trabaja
+en `log_ventas`, valorar si con eso basta o si además hace falta estandarizar (z-score) por serie o
+globalmente — pendiente de decidir antes de la Fase 2.
+
+**T1.5 — Tests de datos (pytest):** formalizar como suite automatizada las verificaciones ya hechas
+a mano (anti-fuga de lags, sin NaN en columnas de entrada, rangos de fecha, nº de familias/tiendas
+esperado) para que corran en CI (Fase 4) y no solo como scripts sueltos.
 
 ## ⏳ Pendiente de decisión / acción del usuario
 

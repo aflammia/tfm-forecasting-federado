@@ -67,8 +67,15 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
   val 8 semanas (2017-04-24→2017-06-12) · test 8 semanas (2017-06-19→2017-08-07). Semanas parciales
   excluidas (2,55%). Verificado: sin fuga temporal, cobertura completa de las 54 tiendas en val/test.
   `data/processed/dataset_modelado.parquet` + `configs/split_config.json`. Detalle en `RESEARCH_LOG.md` Sesión 13.
-- **T1.4** Feature engineering: lags (1,2,4,8 semanas), medias móviles, promo, calendario, festivos, oil.
-  Documentar cada feature. Normalización por serie (para manejar la heterogeneidad de escala entre silos).
+- **T1.4** ✅ **Cerrada (2026-07-18).** Lags (1/2/4/8 sem.), medias móviles (4/8 sem.) y desviación (4 sem.)
+  por serie, sin fuga (verificado sobre 500 filas). `log_ventas` y codificación `family_id`/`store_id`
+  para embeddings. **Corrección importante:** `val` cubre 53 tiendas, no 54 (falta la tienda 52, apertura
+  demasiado reciente para tener historial de lags en ese periodo — sí presente en `test`). Detalle en
+  `RESEARCH_LOG.md` Sesión 16. `data/processed/dataset_features.parquet`.
+  *(Pendiente aún: normalización por serie — decidir si hace falta dado que ya se trabaja en log-escala, ver T1.4b.)*
+- **T1.4b** Decidir si hace falta normalización adicional por serie más allá de `log_ventas`, antes de
+  pasar a la Fase 2 (los baselines LightGBM/ETS no la necesitan; el MLP puede beneficiarse de escalar
+  las features continuas — lags, medias móviles — antes de entrar a la red).
 - **T1.5** Tests de datos (pytest): sin fugas temporales, sin NaN en features de entrada, rangos de fecha correctos, familias/tiendas esperadas.
 
 ### FASE 2 — Baselines (A, B, C) + métodos convencionales de retail (RQ2)
