@@ -34,6 +34,14 @@ def features():
 
 
 @pytest.fixture(scope="module")
+def modelado():
+    """Salida de T1.3: todas las semanas válidas (no parciales) de cada serie, ANTES del
+    recorte de T1.4 por historial de lags insuficiente. Es el "calendario real" contra el que
+    se valida que ningún lag haya cruzado un hueco interno (Sesión 19)."""
+    return pd.read_parquet(PROCESSED / "dataset_modelado.parquet")
+
+
+@pytest.fixture(scope="module")
 def split_config():
     with open(CONFIGS / "split_config.json", encoding="utf-8") as f:
         return json.load(f)
@@ -173,3 +181,25 @@ def test_codificacion_ciclica_en_rango_valido(features):
 def test_ids_categoricos_en_rango_esperado(features):
     assert features["family_id"].between(0, N_FAMILIAS_ESPERADO - 1).all()
     assert features["store_id"].between(0, N_TIENDAS_ESPERADO - 1).all()
+
+
+# ============================================================ HUECOS INTERNOS (Sesión 19)
+
+def test_ninguna_fila_queda_justo_despues_de_un_hueco_interno(features, modelado):
+    """Sesión 19: el 25-dic no tiene NINGUNA fila en train.csv (tiendas cerradas), lo que deja
+    dias_con_dato=6 en la semana que lo contiene y T1.3 la excluye como 'parcial' -- creando un
+    hueco interno en casi todas las series. groupby().shift(N) avanza por POSICION, no por
+    fecha: sin corrección, la fila justo después del hueco heredaría (silenciosamente) el lag de
+    2 semanas atrás en vez de NaN. Se valida contra dataset_modelado.parquet (T1.3, el
+    "calendario real" de semanas válidas, ANTES del recorte de T1.4 por historial insuficiente
+    -- usar `features` como referencia sería circular, ya que también pierde filas al inicio de
+    cada serie por falta de historial, no solo por huecos): toda fila superviviente en
+    `features` debe tener su semana anterior presente en `modelado` para la misma serie."""
+    idx_modelado = set(zip(modelado["store_nbr"], modelado["family"], modelado["week_start"]))
+    semana_anterior = features["week_start"] - pd.Timedelta(weeks=1)
+    claves_anteriores = list(zip(features["store_nbr"], features["family"], semana_anterior))
+    ausentes = sum(1 for clave in claves_anteriores if clave not in idx_modelado)
+    assert ausentes == 0, (
+        f"{ausentes} filas tienen su semana anterior ausente en dataset_modelado.parquet -- "
+        "posible lag mal alineado por un hueco interno (p.ej. Navidad) sin reindexar."
+    )

@@ -941,6 +941,210 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/08_feature_engineering.py
 
 ---
 
+## Sesión 18 — T2.1: módulo de métricas (WMAPE, MASE, RMSSE) + test de Wilcoxon
+
+**Fecha:** 2026-07-18
+**Script:** `src/metrics.py` (librería, no script de pipeline) + `tests/test_metrics.py`
+**Objetivo:** construir el módulo de evaluación compartido por las 6 condiciones experimentales
+(A-F), con las métricas ya fijadas en el diseño experimental (Sesión 1 del RESEARCH_LOG).
+
+### Método
+
+Implementación de:
+- `wmape` — métrica principal del proyecto.
+- `mase` y `rmsse` — escaladas por el error de un naive de un paso calculado en train de cada
+  serie (permiten comparar series de escalas muy distintas, relevante entre nuestros 3 silos).
+  `rmsse` es la métrica oficial de la competición M5.
+- `metricas_por_serie` — calcula las tres métricas por cada serie (tienda×familia).
+- `comparar_condiciones` — test de Wilcoxon pareado (signed-rank) entre dos condiciones,
+  emparejando por serie. Es la comprobación de significancia central del diseño experimental.
+- `porcentaje_brecha_recuperada` — la "métrica estrella" del proyecto (% de la brecha
+  Local→Centralizado que recupera el Federado).
+
+Cada función se verificó con **casos calculados a mano** antes de darla por buena (12 tests en
+`tests/test_metrics.py`), incluyendo: WMAPE con solución exacta conocida, MASE/RMSSE con series
+sintéticas donde el resultado se puede derivar analíticamente, el test de Wilcoxon comprobado en
+dos escenarios de control (diferencia sistemática real → debe detectarla; ruido simétrico sin
+sesgo → no debe detectarla), y los tres casos límite de la métrica de brecha recuperada (0%, 100%,
+caso intermedio).
+
+### Resultados
+
+**12 de 12 tests pasan**, todos contra un cálculo independiente, no solo "el código no falla".
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -m pytest tests/test_metrics.py -v
+```
+
+---
+
+## Sesión 19 — Corrección: huecos internos por Navidad desalineaban los lags (T1.4) y bloqueaban T2.2
+
+**Fecha:** 2026-07-20
+**Scripts:** `src/calendario_semanal.py` (nuevo), `src/08_feature_engineering.py` (corregido),
+`tests/test_data_pipeline.py` (+1 test)
+**Objetivo:** al construir T2.2 (baselines ingenuos), se añadió proactivamente una comprobación de
+seguridad antes de confiar en `shift()` para el baseline estacional (t-52) y de persistencia (t-1):
+verificar que ninguna serie tuviera huecos internos en su secuencia semanal. La comprobación falló:
+**1.749 de 1.782 series (98%) tienen al menos un hueco interno.** Esto detuvo T2.2 y obligó a
+investigar la causa raíz antes de continuar, porque el mismo mecanismo (`groupby().shift()`) se usó
+también en T1.4 (ya cerrado en la Sesión 17) para calcular `lag_log_1/2/4/8` y las medias móviles.
+
+### Diagnóstico
+
+1. Caso concreto: tienda 1, familia AUTOMOTIVE, 4 huecos, el primero en la semana del 2013-12-23.
+2. Se leyó el script completo de T1.2 (`05_build_modeling_dataset.py`): `dias_con_dato` se calcula
+   con `.agg(dias_con_dato=("sales", "count"))`, que cuenta valores NO NULOS — no filas.
+3. Se verificó el panel crudo (`train.csv`): **no hay ningún día con menos de 1.782 filas
+   (54 tiendas × 33 familias)** en ningún punto del rango de fechas — descartaba la hipótesis de
+   filas ausentes a nivel diario general.
+4. Se inspeccionaron directamente las filas de tienda 1/AUTOMOTIVE alrededor del 25-dic-2013 en
+   `train.csv`: la secuencia de fechas salta de **2013-12-24 a 2013-12-26** — el **25 de diciembre
+   no tiene fila** para esa combinación tienda-familia.
+5. Se generalizó la comprobación a las 4 navidades del dataset (2013-2016) y a **todas** las
+   tiendas/familias: `pd.to_datetime(['2013-12-25','2014-12-25','2015-12-25','2016-12-25'])` — **
+   ninguna de las 4 fechas aparece en `train.csv`**, para ninguna combinación. Los días adyacentes
+   (20 a 24 y 26 a 28 de diciembre) sí tienen las 1.782 filas completas cada uno.
+
+**Causa raíz confirmada:** las tiendas de Corporación Favorita cierran el 25 de diciembre y, a
+diferencia de otros días de venta nula, ese cierre no se registra como fila con `sales=0` sino que
+**no genera ninguna fila en absoluto**. Esto deja `dias_con_dato=6` en la semana que contiene el
+25-dic para prácticamente todas las series, y T1.3 excluye correctamente esa semana como "parcial"
+(`dias_con_dato<7`) — pero al excluir una fila completa de en medio de cada serie, crea un hueco
+interno real en el índice semanal.
+
+**Por qué esto rompe `shift()`:** `groupby(...).shift(N)` avanza **N posiciones dentro del grupo**,
+no N semanas de calendario. Si una semana intermedia falta, la fila inmediatamente posterior al
+hueco recibe (en `shift(1)`) el valor de la fila anterior **en posición**, que en realidad es de
+**2 semanas atrás** — un desplazamiento silencioso, sin ningún error ni NaN que lo delate. Esto
+afecta tanto a T1.4 (`lag_log_1/2/4/8`, medias móviles, desviación) como al T2.2 en construcción
+(persistencia, estacional-52, media móvil 4). La verificación anti-fuga de T1.4/T1.5 (búsqueda por
+fecha exacta) **no lo detectaba**: al buscar la fila de la semana `W-1` y no encontrarla (porque es
+precisamente la semana excluida), el chequeo la salta en lugar de fallar — el hueco es invisible
+para una verificación que solo comprueba coincidencia de valores, no la propia continuidad del
+índice.
+
+### Corrección aplicada
+
+Se creó `src/calendario_semanal.py`, con `construir_calendario_completo()`: por cada serie
+(tienda×familia), reconstruye el rango semanal **completo** entre su primera y última semana
+presente (`pd.date_range(..., freq="7D")`) y reintroduce las semanas ausentes con `NaN` en vez de
+saltarlas. Sobre este calendario reindexado, `shift(N)` vuelve a coincidir exactamente con "N
+semanas de calendario atrás": si `N` cruza una semana ausente, el resultado es `NaN` (correcto: "no
+hay dato fiable"), nunca un valor de una semana equivocada.
+
+`src/08_feature_engineering.py` (T1.4) se modificó para calcular `lag_log_*`, `media_movil_log_*` y
+`std_log_4` sobre el calendario reconstruido, y luego unir (`merge`) esos valores de vuelta al
+dataset de modelado real (que ya excluye las semanas parciales como objetivo, sin cambios ahí). El
+paso de "filtrar filas sin historial suficiente" ahora también excluye, correctamente, las filas
+inmediatamente posteriores a cada hueco de Navidad (antes se quedaban con un lag mal alineado en vez
+de ir a NaN).
+
+Se añadió un test nuevo (`test_ninguna_fila_queda_justo_despues_de_un_hueco_interno`) que verifica
+estructuralmente, contra `dataset_modelado.parquet` (el calendario real de T1.3), que ninguna fila
+superviviente en el dataset final tenga su semana anterior ausente en su misma serie — formaliza el
+invariante que la corrección garantiza, en vez de depender solo de una comprobación de valores por
+muestreo.
+
+### Resultados
+
+- Semanas con hueco interno reintroducidas como NaN en el calendario reconstruido: **6.633**.
+- Verificación anti-fuga de `lag_log_1` repetida: **0 discrepancias en 500 filas** (igual que antes,
+  pero ahora la base sobre la que se calcula es correcta).
+- Filas descartadas por historial insuficiente: **67.320 (17,3%)** — sube respecto a la Sesión 17
+  precisamente porque ahora se descartan también las filas justo después de cada hueco de Navidad
+  que antes se colaban con un lag mal alineado.
+- **Dataset final: 322.245 filas** (antes, con el bug: 375.309 — una reducción del 14,2%, coherente
+  con el número de series y años de Navidad afectados).
+- Suite de tests completa: **29 de 29 pasan** (16 de T1.5 + 1 nuevo de esta sesión + 12 de T2.1).
+
+### Decisión y justificación
+
+Se corrige T1.4 en lugar de solo T2.2, aunque T1.4 ya estaba "cerrado" (Sesión 17), porque el mismo
+mecanismo posicional afectaba a ambos y el dataset ya usado como "final" de la Fase 1 tenía lags
+silenciosamente incorrectos alrededor de cada Navidad — un error de esta naturaleza (fuga/desajuste
+temporal) es exactamente el tipo de problema que este proyecto se comprometió a verificar con
+evidencia, no a asumir. Por convención del proyecto, esta sesión no edita la Sesión 17 — la corrige
+mediante una nueva entrada.
+
+### Salidas
+- `src/calendario_semanal.py` — utilidad nueva, reutilizada por T1.4 y T2.2.
+- `data/processed/dataset_features.parquet` — regenerado (322.245 filas, antes 375.309).
+- `configs/normalizacion.json` — regenerado con los nuevos estadísticos de train.
+- `tests/test_data_pipeline.py` — 17 tests (16 + 1 nuevo).
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/08_feature_engineering.py
+./.venv/Scripts/python.exe -m pytest tests/ -v
+```
+
+---
+
+## Sesión 20 — T2.2: baselines ingenuos (suelo de cordura)
+
+**Fecha:** 2026-07-20
+**Script:** `src/10_baselines_ingenuos.py`
+**Objetivo:** establecer el "suelo de cordura" del proyecto — tres predictores sin entrenamiento
+alguno que cualquier condición seria (A-F) debe superar con holgura, evaluados con el módulo de
+métricas de T2.1 (Sesión 18) sobre el dataset ya corregido en la Sesión 19.
+
+### Método
+
+Tres baselines, en escala natural de ventas, calculados por serie (tienda×familia) sobre el
+calendario semanal reconstruido (`calendario_semanal.py`, Sesión 19) para evitar el desajuste de
+`shift()` alrededor de los huecos de Navidad:
+- **Persistencia (t-1):** predicción(semana W) = venta real de W-1.
+- **Estacional (t-52):** predicción(semana W) = venta real de la misma semana, un año antes.
+- **Media móvil (4 semanas):** predicción(semana W) = media de las 4 semanas anteriores.
+
+Evaluados sobre val y test con WMAPE, MASE y RMSSE (por serie, media y mediana), más el WMAPE
+agregado global (suma de errores / suma de ventas) sobre test.
+
+### Resultados
+
+| Baseline | Split | WMAPE (media) | MASE (media) | RMSSE (media) | Cobertura |
+|---|---|---|---|---|---|
+| Persistencia (t-1) | val | 0,2837 | 1,561 | 1,201 | 100,0% |
+| Persistencia (t-1) | test | 0,2670 | 1,315 | 0,967 | 99,8% |
+| Estacional (t-52) | val | 0,3760 | 2,046 | 1,475 | 100,0% |
+| Estacional (t-52) | test | 0,3751 | 1,947 | 1,378 | 98,1% |
+| Media móvil (4 sem.) | val | 0,2683 | 1,437 | 1,025 | 100,0% |
+| Media móvil (4 sem.) | test | 0,2414 | 1,185 | 0,857 | 99,1% |
+
+WMAPE agregado global (test): persistencia 0,0949; estacional 0,1370; media móvil 0,0864.
+
+**Interpretación:** la media móvil de 4 semanas es el baseline más fuerte de los tres (WMAPE más
+bajo en ambos splits), seguida de persistencia; el estacional (t-52) es el más débil — esperable,
+porque una sola semana de hace un año es una referencia mucho más ruidosa que el promedio reciente
+o la semana inmediatamente anterior. MASE y RMSSE medios >1 en los tres baselines confirman que
+ninguno de estos predictores "ingenuos" iguala siquiera al naive de referencia usado como escala
+(persistencia en train) de forma consistente — es la referencia mínima esperada, no un resultado
+sorprendente. La cobertura <100% en test (81,5%-99,8% según baseline) refleja series con historial
+insuficiente para ese baseline concreto (p.ej. estacional-52 no puede evaluarse en series con menos
+de un año de historia antes del punto evaluado) — coherente con las limitaciones ya documentadas
+(tienda 52, aperturas tardías).
+
+Advertencia de numpy ("Mean of empty slice") durante la ejecución: ocurre para series sin ninguna
+fila en train (p.ej. tienda 52, que abre casi al final de train — Sesión 16), donde `mase`/`rmsse`
+devuelven correctamente `NaN` en vez de fallar; no afecta los resultados agregados (`pandas` excluye
+NaN de media/mediana por defecto).
+
+### Salidas
+- `reports/resultados_baselines.csv` — resumen agregado (WMAPE/MASE/RMSSE, media y mediana, por
+  baseline y split) — referencia para comparar contra las condiciones A-F.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/10_baselines_ingenuos.py
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

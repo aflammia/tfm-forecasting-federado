@@ -15,11 +15,24 @@ Añade sobre dataset_modelado.parquet (T1.2+T1.3):
 
 Salida: data/processed/dataset_features.parquet + configs/normalizacion.json (medias/desv. de train,
 para poder revertir o aplicar la misma transformacion de forma reproducible).
+
+CORRECCION (Sesion 19): los lags/medias moviles se calculan sobre un calendario semanal
+RECONSTRUIDO por serie (ver calendario_semanal.py), no directamente sobre las filas de
+dataset_modelado.parquet. Motivo: el 25-dic no tiene NINGUNA fila en train.csv (tiendas
+cerradas), lo que deja `dias_con_dato=6` en la semana que lo contiene y esa semana se excluye
+en T1.3 como "parcial" -- creando un hueco interno en casi todas las series (1749/1782). Como
+groupby().shift(N) avanza por POSICION y no por fecha, sin reindexar ese hueco desplazaba
+silenciosamente los lags de las semanas siguientes (p.ej. lag_log_1 pasaba a ser en realidad
+la venta de 2 semanas atras). Ver Sesion 19 del RESEARCH_LOG para el diagnostico completo.
 """
 import json
 from pathlib import Path
+import sys
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from calendario_semanal import construir_calendario_completo
 
 PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
 CONFIGS = Path(__file__).resolve().parents[1] / "configs"
@@ -38,40 +51,53 @@ def main() -> None:
     data["log_ventas"] = np.log1p(data["ventas"])
 
     # ---------------------------------------------- 2. autorregresivas EN ESCALA LOG, por serie
-    print("[1/6] Calculando lags sobre log_ventas (no sobre ventas en bruto)...")
-    g = data.groupby(["store_nbr", "family"], sort=False)["log_ventas"]
-    for L in LAGS:
-        data[f"lag_log_{L}"] = g.shift(L)
+    # Sobre un calendario semanal RECONSTRUIDO (huecos internos, p.ej. Navidad, = NaN) para que
+    # shift()/rolling() -- que avanzan por POSICION -- no crucen un hueco silenciosamente.
+    print("[1/6] Reconstruyendo calendario semanal completo por serie (huecos internos = NaN)...")
+    completo = construir_calendario_completo(data, cols_valor=["log_ventas"])
+    n_huecos = completo["log_ventas"].isna().sum()
+    print(f"       Semanas con hueco interno reintroducidas como NaN: {n_huecos:,}")
 
-    print("[2/6] Medias moviles y desviacion (excluyendo la semana actual)...")
+    print("[2/6] Calculando lags sobre log_ventas (no sobre ventas en bruto)...")
+    g = completo.groupby(["store_nbr", "family"], sort=False)["log_ventas"]
+    for L in LAGS:
+        completo[f"lag_log_{L}"] = g.shift(L)
+
+    print("       Medias moviles y desviacion (excluyendo la semana actual)...")
     log_pasado = g.shift(1)
     for W in VENTANAS_MEDIA:
-        data[f"media_movil_log_{W}"] = (
-            log_pasado.groupby([data["store_nbr"], data["family"]]).rolling(W, min_periods=W).mean().values
+        completo[f"media_movil_log_{W}"] = (
+            log_pasado.groupby([completo["store_nbr"], completo["family"]]).rolling(W, min_periods=W).mean().values
         )
-    data[f"std_log_{VENTANA_STD}"] = (
-        log_pasado.groupby([data["store_nbr"], data["family"]]).rolling(VENTANA_STD, min_periods=VENTANA_STD).std().values
+    completo[f"std_log_{VENTANA_STD}"] = (
+        log_pasado.groupby([completo["store_nbr"], completo["family"]]).rolling(VENTANA_STD, min_periods=VENTANA_STD).std().values
+    )
+
+    cols_autoreg_calc = [f"lag_log_{L}" for L in LAGS] + [f"media_movil_log_{W}" for W in VENTANAS_MEDIA] + [f"std_log_{VENTANA_STD}"]
+    data = data.merge(
+        completo[["store_nbr", "family", "week_start"] + cols_autoreg_calc],
+        on=["store_nbr", "family", "week_start"], how="left",
     )
 
     # ---------------------------------------------- 3. onpromotion en log(1+x) -- muy asimetrico en crudo
     data["log_onpromotion"] = np.log1p(data["onpromotion"])
 
     # ---------------------------------------------- 4. codificacion ciclica de calendario
-    print("[3/6] Codificacion ciclica (seno/coseno) de semana del anio y mes...")
+    print("[3/7] Codificacion ciclica (seno/coseno) de semana del anio y mes...")
     data["semana_sin"] = np.sin(2 * np.pi * data["semana_del_anio"] / 52)
     data["semana_cos"] = np.cos(2 * np.pi * data["semana_del_anio"] / 52)
     data["mes_sin"] = np.sin(2 * np.pi * data["mes"] / 12)
     data["mes_cos"] = np.cos(2 * np.pi * data["mes"] / 12)
 
     # ---------------------------------------------- 5. categoricas para embeddings
-    print("[4/6] Codificando categoricas (family_id, store_id)...")
+    print("[4/7] Codificando categoricas (family_id, store_id)...")
     familias = sorted(data["family"].unique())
     data["family_id"] = data["family"].map({f: i for i, f in enumerate(familias)}).astype("int16")
     tiendas = sorted(data["store_nbr"].unique())
     data["store_id"] = data["store_nbr"].map({s: i for i, s in enumerate(tiendas)}).astype("int16")
 
     # ---------------------------------------------- 6. verificacion anti-fuga (sobre la nueva version log)
-    print("\n[5/6] Verificacion anti-fuga: lag_log_1 de la semana W debe = log_ventas de la semana W-1")
+    print("\n[5/7] Verificacion anti-fuga: lag_log_1 de la semana W debe = log_ventas de la semana W-1")
     con_lag1 = data.dropna(subset=["lag_log_1"])
     muestra = con_lag1.sample(min(500, len(con_lag1)), random_state=42)
     fallos = 0
@@ -84,14 +110,16 @@ def main() -> None:
     print(f"       OK — {len(muestra)} filas verificadas al azar, 0 discrepancias.")
 
     # ---------------------------------------------- filtrar filas sin historial suficiente
-    cols_autoreg = [f"lag_log_{L}" for L in LAGS] + [f"media_movil_log_{W}" for W in VENTANAS_MEDIA] + [f"std_log_{VENTANA_STD}"]
+    # (incluye ahora, correctamente, las filas justo despues de un hueco interno tipo Navidad,
+    # que antes de la Sesion 19 se quedaban con un lag mal alineado en vez de ir a NaN)
+    cols_autoreg = cols_autoreg_calc
     con_nan = data[cols_autoreg].isna().any(axis=1)
-    print(f"\n       Filas sin historial suficiente: {con_nan.sum():,} ({con_nan.mean()*100:.2f}%)")
+    print(f"\n[6/7] Filas sin historial suficiente: {con_nan.sum():,} ({con_nan.mean()*100:.2f}%)")
     print(data.loc[con_nan, "split"].value_counts().to_string())
     data = data.loc[~con_nan].reset_index(drop=True)
 
     # ---------------------------------------------- 7. estandarizacion z-score (SOLO estadisticos de train)
-    print("\n[6/6] Estandarizando features continuas (media/desviacion calculadas SOLO con train)...")
+    print("\n[7/7] Estandarizando features continuas (media/desviacion calculadas SOLO con train)...")
     cols_a_normalizar = (
         cols_autoreg + ["log_onpromotion", "oil_price"]
     )

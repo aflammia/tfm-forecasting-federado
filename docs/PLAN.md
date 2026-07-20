@@ -77,12 +77,21 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
   Detalle en `RESEARCH_LOG.md` Sesión 17.
 - **T1.5** ✅ **Cerrada (2026-07-18).** `tests/test_data_pipeline.py` — 16 tests con pytest (silos, sin
   duplicados/NaN, anti-fuga temporal y de lags, estandarización, rangos de codificación). 16/16 pasan.
+- **Corrección (Sesión 19, 2026-07-20):** el 25-dic no tiene ninguna fila en `train.csv` (tiendas
+  cerradas), lo que dejaba un hueco interno en 1.749/1.782 series tras la exclusión de "semanas
+  parciales" (T1.3) y desalineaba silenciosamente los lags de T1.4 (`groupby().shift()` avanza por
+  posición, no por fecha). Corregido con `src/calendario_semanal.py` (reindexado por serie antes de
+  cualquier shift/rolling). Dataset regenerado: 322.245 filas (antes 375.309). 17 tests (16+1 nuevo)
+  pasan. Ver `RESEARCH_LOG.md` Sesión 19.
 
-**→ Fase 1 (Pipeline de datos) completa: T1.1 a T1.5 cerradas.**
+**→ Fase 1 (Pipeline de datos) completa: T1.1 a T1.5 cerradas (incl. corrección Sesión 19).**
 
 ### FASE 2 — Baselines (A, B, C) + métodos convencionales de retail (RQ2)
-- **T2.1** Módulo de métricas: WMAPE, RMSSE, MASE (por serie y agregada) + helper de Wilcoxon.
-- **T2.2** Baselines ingenuos (naive estacional, media móvil) como suelo de cordura.
+- **T2.1** ✅ **Cerrada (2026-07-18).** `src/metrics.py` — WMAPE, RMSSE, MASE (por serie y agregada) +
+  test de Wilcoxon pareado + `porcentaje_brecha_recuperada`. 12/12 tests pasan. Ver Sesión 18.
+- **T2.2** ✅ **Cerrada (2026-07-20).** `src/10_baselines_ingenuos.py` — persistencia, estacional-52,
+  media móvil-4, evaluados en val/test. Media móvil es el más fuerte (WMAPE test=0,24); estacional el
+  más débil (WMAPE test=0,38). Resultado en `reports/resultados_baselines.csv`. Ver Sesión 20.
 - **T2.2b** Baselines convencionales de retail — **lo que responde RQ2**: suavizado exponencial (ETS/Holt-Winters) y **LightGBM por tienda** (el estándar de facto en la industria y en competiciones de forecasting como M5). Sin esto, "supera a los métodos convencionales" quedaría sin demostrar.
 - **T2.3** Condición A (Local): un modelo pequeño por tienda.
 - **T2.4** Condición B (Centralizado por silo).

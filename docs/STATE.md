@@ -1,11 +1,11 @@
 # STATE.md — Estado actual y próxima tarea
 
 > Documento vivo. **Actualízalo al completar cada tarea** (marca hecho, anota lo aprendido).
-> Última actualización: 2026-07-18 — **FASE 1 COMPLETA (T1.1 a T1.5).** Estado del arte de la
-> partición en silos documentado con cita a PA-CFL (Sesión 15); `cluster` descartado como feature
-> (Sesión 15); T1.4 corregida (lags recalculados en escala log, Sesión 17); T1.4b normalización
-> (cíclica + z-score train-only); T1.5 suite de 16 tests con pytest, todos pasan. Sistema de citas
-> APA creado (`docs/REFERENCIAS.md`). Próxima: **Fase 2** (baselines A/B/C + LightGBM/ETS).
+> Última actualización: 2026-07-20 — **FASE 1 completa y corregida** (T1.1-T1.5 + corrección Sesión
+> 19: hueco interno de Navidad en 1.749/1.782 series desalineaba los lags de T1.4 por `shift()`
+> posicional; corregido con `src/calendario_semanal.py`, dataset regenerado a 322.245 filas). **T2.1
+> y T2.2 cerradas** (módulo de métricas + baselines ingenuos, ver Sesiones 18 y 20). Próxima: **T2.2b**
+> (LightGBM + ETS/Holt-Winters, responde RQ2).
 
 ## ✅ Hecho
 
@@ -32,24 +32,24 @@
 - [x] `notebooks/01_refresher_mlp_embeddings_fedavg.ipynb` — MLP desde cero (94,7% menos error que regresión en datos no lineales), embeddings visualizados, simulación de FedAvg con 3 silos sintéticos (federado empata con el mejor local y bate ampliamente a los peores). Material de apoyo, ejecutado sin errores.
 - [x] Entorno ampliado: `torch`, `lightgbm`, `statsmodels` instalados y en `requirements.txt`.
 - [x] **T1.2 cerrada**: `data/processed/tienda_familia_semana.parquet` — agregación semanal + petróleo + festivos (nacional/regional/local, con `transferred` tratado) + día de pago + recorte de apertura tardía. 0 nulos, venta total verificada idéntica al original. Ver `src/05_build_modeling_dataset.py`.
+- [x] **T1.4b y T1.5 cerradas (2026-07-18)**: normalización (cíclica + z-score train-only) y suite de 16 tests pytest. Ver RESEARCH_LOG Sesión 17.
+- [x] **Corrección Sesión 19 (2026-07-20)**: el 25-dic no tiene ninguna fila en `train.csv` para ninguna tienda/familia (cierre por festivo, sin siquiera un registro de venta=0), lo que dejaba `dias_con_dato=6` esa semana → T1.3 la excluye correctamente como "parcial" → hueco interno real en 1.749/1.782 series. `groupby().shift()` avanza por posición, no por fecha, así que ese hueco desalineaba silenciosamente los lags de T1.4 justo después de cada Navidad. Corregido con `src/calendario_semanal.py` (reindexa cada serie a un calendario semanal completo, huecos=NaN, antes de cualquier shift/rolling). `dataset_features.parquet` regenerado: **322.245 filas** (antes 375.309). Test nuevo (`test_ninguna_fila_queda_justo_despues_de_un_hueco_interno`) formaliza el invariante. 17/17 tests pasan.
+- [x] **T2.1 cerrada (2026-07-18)**: `src/metrics.py` — WMAPE, MASE, RMSSE, comparación Wilcoxon pareada, `porcentaje_brecha_recuperada` (la métrica estrella del proyecto). 12/12 tests pasan. Ver RESEARCH_LOG Sesión 18.
+- [x] **T2.2 cerrada (2026-07-20)**: `src/10_baselines_ingenuos.py` — persistencia (t-1), estacional (t-52), media móvil (4 sem.), evaluados en val/test. Media móvil es el suelo de cordura más fuerte (WMAPE test=0,24); estacional el más débil (WMAPE test=0,38). Resultado en `reports/resultados_baselines.csv`. Ver RESEARCH_LOG Sesión 20.
 
-## ▶️ PRÓXIMA TAREA — T1.4b y T1.5 (Fase 1, cierre)
+## ▶️ PRÓXIMA TAREA — T2.2b (Fase 2, RQ2)
 
-**T1.1 a T1.4 cerradas (2026-07-18).**
+**T1.1 a T1.5 (+ corrección Sesión 19), T2.1 y T2.2 cerradas.**
 - `data/processed/stores_silos.csv` — silos Propuesta 2.
 - `data/processed/dataset_modelado.parquet` — con columna `split`, sin fuga temporal.
 - `data/processed/dataset_features.parquet` — **el dataset final**: lags, medias móviles, `log_ventas`,
-  `family_id`/`store_id` codificados. 375.309 filas. **Ojo: `val` tiene 53 tiendas (no 54) — falta la
-  tienda 52, ver `RESEARCH_LOG.md` Sesión 16.**
+  `family_id`/`store_id` codificados. **322.245 filas** (Sesión 19). **Ojo: `val` tiene 53 tiendas (no
+  54) — falta la tienda 52, ver `RESEARCH_LOG.md` Sesión 16.**
+- `reports/resultados_baselines.csv` — suelo de cordura (persistencia/estacional/media móvil).
 
-**T1.4b — Normalización:** decidir si las features continuas (lags, medias móviles) necesitan
-escalado antes de entrar al MLP (los baselines LightGBM/ETS no lo necesitan). Dado que ya se trabaja
-en `log_ventas`, valorar si con eso basta o si además hace falta estandarizar (z-score) por serie o
-globalmente — pendiente de decidir antes de la Fase 2.
-
-**T1.5 — Tests de datos (pytest):** formalizar como suite automatizada las verificaciones ya hechas
-a mano (anti-fuga de lags, sin NaN en columnas de entrada, rangos de fecha, nº de familias/tiendas
-esperado) para que corran en CI (Fase 4) y no solo como scripts sueltos.
+**T2.2b — Baselines convencionales de retail (responde RQ2):** suavizado exponencial (ETS/Holt-Winters,
+`statsmodels`) y LightGBM por tienda — el estándar de facto en competiciones de forecasting (M5).
+Necesario para poder afirmar "supera a los métodos convencionales" con evidencia.
 
 ## ⏳ Pendiente de decisión / acción del usuario
 
