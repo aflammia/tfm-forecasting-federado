@@ -67,16 +67,18 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
   val 8 semanas (2017-04-24→2017-06-12) · test 8 semanas (2017-06-19→2017-08-07). Semanas parciales
   excluidas (2,55%). Verificado: sin fuga temporal, cobertura completa de las 54 tiendas en val/test.
   `data/processed/dataset_modelado.parquet` + `configs/split_config.json`. Detalle en `RESEARCH_LOG.md` Sesión 13.
-- **T1.4** ✅ **Cerrada (2026-07-18).** Lags (1/2/4/8 sem.), medias móviles (4/8 sem.) y desviación (4 sem.)
-  por serie, sin fuga (verificado sobre 500 filas). `log_ventas` y codificación `family_id`/`store_id`
-  para embeddings. **Corrección importante:** `val` cubre 53 tiendas, no 54 (falta la tienda 52, apertura
-  demasiado reciente para tener historial de lags en ese periodo — sí presente en `test`). Detalle en
-  `RESEARCH_LOG.md` Sesión 16. `data/processed/dataset_features.parquet`.
-  *(Pendiente aún: normalización por serie — decidir si hace falta dado que ya se trabaja en log-escala, ver T1.4b.)*
-- **T1.4b** Decidir si hace falta normalización adicional por serie más allá de `log_ventas`, antes de
-  pasar a la Fase 2 (los baselines LightGBM/ETS no la necesitan; el MLP puede beneficiarse de escalar
-  las features continuas — lags, medias móviles — antes de entrar a la red).
-- **T1.5** Tests de datos (pytest): sin fugas temporales, sin NaN en features de entrada, rangos de fecha correctos, familias/tiendas esperadas.
+- **T1.4** ✅ **Cerrada y corregida (2026-07-18).** Lags (1/2/4/8 sem.), medias móviles (4/8 sem.) y
+  desviación (4 sem.) por serie, **en escala log(1+ventas)** (corrección de la Sesión 17 — se calcularon
+  primero en escala cruda por error, inconsistente con la justificación de la Sesión 5). `log_ventas`,
+  `log_onpromotion`, y codificación `family_id`/`store_id` para embeddings. **`val` cubre 53 tiendas, no
+  54** (falta la tienda 52 por apertura reciente — Sesión 16). `data/processed/dataset_features.parquet`.
+- **T1.4b** ✅ **Cerrada (2026-07-18).** Codificación cíclica (seno/coseno) de semana/mes; estandarización
+  z-score de las features continuas con estadísticos calculados solo con train (`configs/normalizacion.json`).
+  Detalle en `RESEARCH_LOG.md` Sesión 17.
+- **T1.5** ✅ **Cerrada (2026-07-18).** `tests/test_data_pipeline.py` — 16 tests con pytest (silos, sin
+  duplicados/NaN, anti-fuga temporal y de lags, estandarización, rangos de codificación). 16/16 pasan.
+
+**→ Fase 1 (Pipeline de datos) completa: T1.1 a T1.5 cerradas.**
 
 ### FASE 2 — Baselines (A, B, C) + métodos convencionales de retail (RQ2)
 - **T2.1** Módulo de métricas: WMAPE, RMSSE, MASE (por serie y agregada) + helper de Wilcoxon.

@@ -863,6 +863,84 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/08_feature_engineering.py
 
 ---
 
+## Sesión 17 — T1.4b (normalización) y T1.5 (tests): cierre de la Fase 1
+
+**Fecha:** 2026-07-18
+**Script:** `src/08_feature_engineering.py` (reescrito) + `tests/test_data_pipeline.py`
+**Objetivo:** corregir una inconsistencia detectada en T1.4, decidir y aplicar la normalización de
+las features continuas, y formalizar como suite automatizada las verificaciones manuales de las
+Sesiones 11, 13 y 16.
+
+### Corrección sobre T1.4 — lags en escala logarítmica, no en escala cruda
+
+Al diseñar la normalización se detectó que T1.4 calculó los lags y medias móviles sobre `ventas` en
+bruto, no sobre `log_ventas` — inconsistente con la justificación completa de la Sesión 5 (la
+transformación logarítmica existe para estabilizar la varianza y homogeneizar la escala numérica
+**entre silos** antes de la agregación de FedAvg; dejar los lags en escala cruda reintroduce el mismo
+problema por la puerta de atrás, en las variables de entrada en vez de en el objetivo).
+
+**Evidencia que motivó la corrección** (verificada, no asumida): asimetría (skew) de `ventas` = 5,32
+frente a `log_ventas` = -0,10 (casi simétrica); `onpromotion` en crudo tiene skew = 11,07.
+
+**Corrección aplicada:** todos los lags (`lag_log_1/2/4/8`), medias móviles y desviación se
+recalculan sobre `log_ventas`. `onpromotion` también se transforma con `log(1+x)` por la misma razón.
+
+### Método — T1.4b (normalización)
+
+1. **Codificación cíclica** de `semana_del_anio` y `mes` (seno/coseno) — un código ordinal simple
+   haría que el modelo viera la semana 52 y la semana 1 como extremos opuestos, cuando en realidad
+   son consecutivas (diciembre-enero).
+2. **Estandarización z-score** de todas las features continuas finales (lags log, medias móviles log,
+   `log_onpromotion`, `oil_price`), con media y desviación **calculadas solo con el conjunto de
+   train** — para no filtrar estadísticos de val/test hacia el entrenamiento. Estadísticos guardados
+   en `configs/normalizacion.json` para aplicarlos de forma reproducible (y poder revertir la
+   transformación al interpretar resultados).
+
+### Resultados
+
+Verificación anti-fuga repetida sobre la versión corregida: **0 discrepancias en 500 filas**.
+Estandarización verificada: media≈0,0000 y desviación≈1,0000 en train para las columnas `_z`.
+
+### Método — T1.5 (tests automatizados)
+
+Se creó `tests/test_data_pipeline.py` (pytest) con **16 tests** que formalizan todas las
+verificaciones manuales de las sesiones anteriores: composición de silos, ausencia de duplicados y
+de NaN en columnas de entrenamiento, ausencia de fuga temporal entre splits, coincidencia de fechas
+con `configs/split_config.json`, anti-fuga de lags (dos tests: valor exacto y coherencia estructural
+de fechas), correctitud de la estandarización, y rangos válidos de las codificaciones.
+
+**Detalle relevante del propio proceso de testing:** el primer test de fechas de split falló al
+ejecutarlo — no por un error en los datos, sino porque el test comparaba ingenuamente contra
+`split_config.json` (generado en T1.3, antes de recortar por lags). Es **correcto** que `train`
+empiece ahora el 2013-03-04 en vez del 2013-01-07 original (2013-01-07 + 8 semanas exactas de
+recorte por historial insuficiente). Se corrigió el test para comprobar lo que realmente debe
+cumplirse: `val`/`test` coinciden exactamente con T1.3 (no se ven afectados por el recorte, están al
+final de cada serie), y `train` solo debe tener fecha mínima **posterior o igual**, nunca anterior.
+
+### Resultados finales
+
+**16 de 16 tests pasan** (`pytest tests/ -v`).
+
+### Salidas
+- `data/processed/dataset_features.parquet` — dataset final corregido (lags en log-escala,
+  codificación cíclica, features estandarizadas). Mismas 375.309 filas que en T1.4.
+- `configs/normalizacion.json` — media y desviación de train por columna, para reproducibilidad.
+- `tests/test_data_pipeline.py` — 16 tests automatizados.
+
+### Cierre de la Fase 1
+
+Con esta sesión se completan T1.1 a T1.5 — el pipeline de datos queda cerrado, verificado y
+documentado de principio a fin. Próximo hito: Fase 2 (baselines A/B/C + LightGBM/ETS).
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/08_feature_engineering.py
+./.venv/Scripts/python.exe -m pytest tests/ -v
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

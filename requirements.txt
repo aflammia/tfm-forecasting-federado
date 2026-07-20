@@ -22,3 +22,6 @@ nbclient>=0.9
 nbconvert>=7.0
 ipykernel>=6.29
 jupyter_client>=8.6
+
+# Testing
+pytest>=8.0

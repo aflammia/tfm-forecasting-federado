@@ -1,12 +1,11 @@
 # STATE.md — Estado actual y próxima tarea
 
 > Documento vivo. **Actualízalo al completar cada tarea** (marca hecho, anota lo aprendido).
-> Última actualización: 2026-07-18 — **T1.1 a T1.4 cerradas.** Estado del arte de la partición en
-> silos documentado con cita a PA-CFL (Sesión 15); `cluster` descartado como feature de entrenamiento
-> (17 clusters/54 tiendas, 4 singletons — Sesión 15); T1.4 cerrada con verificación anti-fuga (0
-> discrepancias) y una corrección importante: `val` cubre 53 tiendas, no 54 (falta la tienda 52 por
-> apertura reciente — Sesión 16). Sistema de citas APA creado (`docs/REFERENCIAS.md`). Próxima: T1.4b
-> (decidir normalización) y T1.5 (tests de datos).
+> Última actualización: 2026-07-18 — **FASE 1 COMPLETA (T1.1 a T1.5).** Estado del arte de la
+> partición en silos documentado con cita a PA-CFL (Sesión 15); `cluster` descartado como feature
+> (Sesión 15); T1.4 corregida (lags recalculados en escala log, Sesión 17); T1.4b normalización
+> (cíclica + z-score train-only); T1.5 suite de 16 tests con pytest, todos pasan. Sistema de citas
+> APA creado (`docs/REFERENCIAS.md`). Próxima: **Fase 2** (baselines A/B/C + LightGBM/ETS).
 
 ## ✅ Hecho
 
