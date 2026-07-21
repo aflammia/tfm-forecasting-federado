@@ -1348,6 +1348,81 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/11_baselines_convencionale
 
 ---
 
+## Sesión 23 — T2.3: Condición A (Local) — MLP+embeddings por tienda
+
+**Fecha:** 2026-07-21
+**Scripts:** `src/modelo_mlp.py` (nuevo, módulo compartido A-E) + `src/12_condicion_a_local.py` +
+`tests/test_modelo_mlp.py`
+**Objetivo:** implementar en PyTorch la arquitectura MLP+embeddings fijada en la Sesión 5
+(refinada con la dimensión de entrada exacta en el diagrama de arquitectura de la Sesión 22) y
+entrenar la primera condición experimental real: A (Local) — un modelo independiente por tienda,
+sin ninguna colaboración entre ellas.
+
+### Método
+
+`src/modelo_mlp.py`: `MLPConEmbeddings` (33→64→32→1, Dropout 0,2 tras la primera capa, 4.985
+parámetros verificados por test), `DatasetVentas` (envuelve un DataFrame en tensores), y
+`entrenar()` (Huber loss, Adam lr=1e-3, early stopping sobre val_loss, devuelve los MEJORES pesos
+vistos, no los últimos). Reutilizable sin cambios por B, C, D y E — solo cambia qué filas se le
+pasan a `entrenar()`.
+
+`src/12_condicion_a_local.py`: entrena 54 modelos independientes (uno por tienda), cada uno solo
+con las filas de esa tienda. Para la tienda 52 (sin val propio por apertura tardía, Sesión 16) se
+reserva el 15% final de su train como val interno solo para decidir el early stopping.
+
+**Distinción explícita frente a la corrección de la Sesión 22:** allí, un LightGBM por tienda no
+lograba batir a un baseline simple por falta de datos, y se sustituyó por un modelo global. Aquí
+NO se corrige la escasez de datos por tienda -- es precisamente lo que la condición "Local" debe
+representar con fidelidad. Que A rinda peor que un modelo con más datos es el resultado esperado y
+necesario para que el resto del experimento (B-E) tenga algo que demostrar.
+
+### Resultados
+
+| Condición | Split | WMAPE mediana | MASE mediana | RMSSE mediana | Cobertura |
+|---|---|---|---|---|---|
+| A — Local | val | 0,1569 | 1,0369 | 0,8592 | 100,0% |
+| A — Local | test | 0,1476 | 0,9283 | 0,7501 | 98,1% |
+
+Comparado con lo ya cerrado (test, por mediana):
+
+| Método | WMAPE | MASE | RMSSE |
+|---|---|---|---|
+| LightGBM (global, T2.2b) | 0,1320 | 0,7749 | 0,6300 |
+| Media móvil (T2.2) | 0,1379 | 0,8672 | 0,7023 |
+| **A — Local (MLP, T2.3)** | **0,1476** | **0,9283** | **0,7501** |
+| Persistencia (T2.2) | 0,1584 | 0,9742 | 0,8025 |
+| Estacional (T2.2) | 0,2296 | 1,2684 | 1,0215 |
+| ETS/Holt-Winters (T2.2b) | 0,3344 | 1,4553 | 1,1883 |
+
+**Interpretación:** A queda por delante de persistencia, estacional y ETS, pero por detrás de la
+media móvil y del LightGBM global -- exactamente lo esperado: 54 modelos entrenando cada uno con
+~6.000 filas propias no pueden competir con un solo modelo que ve las ~294.000 filas de train
+completas. Es el punto de partida ("sin colaboración") frente al que B (centralizado por silo), C
+(centralizado global) y, sobre todo, D/E (federado) deben demostrar mejora — la pregunta central
+de RQ1.
+
+### Resultados finales de tests
+
+**7 de 7 tests nuevos pasan** (`tests/test_modelo_mlp.py`): recuento exacto de parámetros,
+forma de la salida, dimensiones de los embeddings, forma de los tensores del dataset, reducción
+de pérdida con señal sintética aprendible, activación del early stopping, no negatividad de las
+predicciones. **46 de 46 tests en total** (`pytest tests/ -v`).
+
+### Salidas
+- `src/modelo_mlp.py` — arquitectura y utilidades de entrenamiento, reutilizable por B-E.
+- `src/12_condicion_a_local.py` — entrenamiento y evaluación de la condición A.
+- `reports/resultados_condicion_A_local.csv`.
+- `tests/test_modelo_mlp.py` — 7 tests.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/12_condicion_a_local.py
+./.venv/Scripts/python.exe -m pytest tests/ -v
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

@@ -6,7 +6,10 @@
 > convencionales (ETS/Holt-Winters + **LightGBM global**, responde RQ2). Corrección Sesión 22: el
 > LightGBM por tienda no batía ni al baseline ingenuo por falta de datos por modelo; sustituido por
 > un único modelo global (tuneado) que bate a media móvil y ETS en las tres métricas por mediana.
-> Próxima: **T2.3-T2.5** (condiciones A/B/C: local, centralizado por silo, centralizado global).
+> **T2.3 cerrada**: `src/modelo_mlp.py` (MLP+embeddings en PyTorch, compartido por A-E) + Condición
+> A (Local, 54 modelos por tienda) — WMAPE test mediana=0,148, el punto de partida "sin
+> colaboración" que B-E deben mejorar. 46/46 tests. Próxima: **T2.4-T2.5** (condiciones B/C:
+> centralizado por silo, centralizado global) — mismo módulo, reagrupando los datos de entrada.
 
 ## ✅ Hecho
 
@@ -39,10 +42,11 @@
 - [x] **T2.2 cerrada (2026-07-20)**: `src/10_baselines_ingenuos.py` — persistencia (t-1), estacional (t-52), media móvil (4 sem.), evaluados en val/test. Media móvil es el suelo de cordura más fuerte (WMAPE test=0,24); estacional el más débil (WMAPE test=0,38). Resultado en `reports/resultados_baselines.csv`. Ver RESEARCH_LOG Sesión 20.
 - [x] **T2.2b cerrada (2026-07-21)**: `src/11_baselines_convencionales.py` — ETS/Holt-Winters por serie. Diagnóstico y corrección de una inestabilidad seria en ETS (tendencia sin amortiguar + prefijos de ceros estructurales por falta de surtido de familia → predicciones de millones de unidades para PRODUCE en varias tiendas); tras `damped_trend`, recorte de prefijo de ceros y techo de cordura (3× el máximo histórico de cada serie), la cola pesada restante es la limitación conocida de ETS ante demanda intermitente (PLAYERS AND ELECTRONICS, CELEBRATION, PET SUPPLIES...), no un bug. Nuevo gotcha de datos documentado: 779/1.749 series (45%) tienen un prefijo de ceros >4 semanas al inicio de train — no todas las tiendas venden todas las familias (`DATA.md` 2.6.3). Ver RESEARCH_LOG Sesión 21.
 - [x] **Corrección Sesión 22 (2026-07-21)**: el primer LightGBM (por tienda, 54 modelos, sin tuning) no superaba ni a la media móvil (T2.2). Tras tunear hiperparámetros (búsqueda aleatoria, 25 candidatos) y ampliar features (festivos, día de pago), seguía sin ganar — causa real: cada modelo por tienda entrenaba con ~5-6 mil filas y decidía early stopping sobre un val de solo ~264 filas, demasiado ruidoso. Sustituido por **un único LightGBM global** (`store_id`+`family_id` como categóricas, ~54x más datos por modelo) — bate a la media móvil y a ETS en WMAPE/MASE/RMSSE por mediana (WMAPE test 0,132 vs 0,138 y 0,334), cobertura 100%. `configs/lightgbm_hiperparametros.json` guardado para reproducibilidad. Ver RESEARCH_LOG Sesión 22.
+- [x] **T2.3 cerrada (2026-07-21)**: `src/modelo_mlp.py` — MLP+embeddings en PyTorch (33→64→32→1, 4.985 parámetros, Huber+Adam, early stopping), arquitectura compartida por las condiciones A-E, reutilizable sin cambios. `src/12_condicion_a_local.py` — Condición A (Local): 54 modelos independientes, uno por tienda. WMAPE test mediana=0,1476 (por delante de persistencia/estacional/ETS, por detrás de media móvil y LightGBM global — esperado, cada modelo ve solo ~6.000 filas propias). A diferencia de la corrección del LightGBM (Sesión 22), aquí la escasez de datos por tienda NO se corrige: es justo lo que la condición "Local" debe representar. 7 tests nuevos (46/46 en total). Ver RESEARCH_LOG Sesión 23.
 
-## ▶️ PRÓXIMA TAREA — T2.3-T2.5 (Fase 2, condiciones A/B/C)
+## ▶️ PRÓXIMA TAREA — T2.4-T2.5 (Fase 2, condiciones B/C)
 
-**T1.1 a T1.5 (+ corrección Sesión 19), T2.1, T2.2 y T2.2b cerradas.**
+**T1.1 a T1.5 (+ corrección Sesión 19), T2.1, T2.2, T2.2b y T2.3 cerradas.**
 - `data/processed/stores_silos.csv` — silos Propuesta 2.
 - `data/processed/dataset_modelado.parquet` — con columna `split`, sin fuga temporal.
 - `data/processed/dataset_features.parquet` — **el dataset final**: lags, medias móviles, `log_ventas`,
@@ -50,13 +54,16 @@
   54) — falta la tienda 52, ver `RESEARCH_LOG.md` Sesión 16.**
 - `reports/resultados_baselines.csv` — suelo de cordura (persistencia/estacional/media móvil).
 - `reports/resultados_baselines_convencionales.csv` — ETS/Holt-Winters y LightGBM global (RQ2).
+- `reports/resultados_condicion_A_local.csv` — Condición A, WMAPE test mediana=0,1476.
+- `src/modelo_mlp.py` — arquitectura MLP+embeddings (PyTorch), lista para reutilizar en B-E sin
+  modificarla — solo cambia qué filas se le pasan a `entrenar()`.
 - `src/calendario_semanal.py` — utilidad de reindexado semanal, reutilizable donde haga falta un
   `shift()`/`rolling()` calendario-correcto (T3, si se necesitara).
 
-**T2.3-T2.5 — Condiciones A (Local), B (Centralizado por silo), C (Centralizado global):** entrenar
-el MLP+embeddings (arquitectura fijada en la Sesión 5) bajo los tres regímenes de agregación de
-datos, evaluar con el mismo módulo de métricas (T2.1) y comparar contra los baselines ya cerrados
-(T2.2/T2.2b). A partir de aquí, integrar **Weights & Biases** para trackear cada corrida.
+**T2.4-T2.5 — Condiciones B (Centralizado por silo) y C (Centralizado global):** mismo
+`modelo_mlp.py`, agrupando los datos de entrada por silo (3 modelos) o globalmente (1 modelo, el
+"techo" en la práctica inviable) en vez de por tienda. Evaluar con T2.1 y comparar contra A y los
+baselines ya cerrados. A partir de aquí, integrar **Weights & Biases** para trackear cada corrida.
 
 ## ⏳ Pendiente de decisión / acción del usuario
 

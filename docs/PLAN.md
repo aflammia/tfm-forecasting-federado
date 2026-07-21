@@ -104,7 +104,12 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
   hiperparámetros tuneados por búsqueda aleatoria) — bate a la media móvil y a ETS en las tres
   métricas por mediana (WMAPE test 0,132 vs 0,138 y 0,334). Primer resultado propio que corrobora
   Petropoulos et al. (2024) con un baseline que de verdad gana.
-- **T2.3** Condición A (Local): un modelo pequeño por tienda.
+- **T2.3** ✅ **Cerrada (2026-07-21).** Condición A (Local): `src/modelo_mlp.py` (arquitectura
+  MLP+embeddings compartida por A-E, PyTorch) + `src/12_condicion_a_local.py` — 54 modelos
+  independientes, uno por tienda. WMAPE test mediana=0,1476 — por delante de persistencia/
+  estacional/ETS, por detrás de media móvil y LightGBM global (esperado: cada modelo ve solo
+  ~6.000 filas propias). Es el punto de partida "sin colaboración" que B-E deben mejorar. Ver
+  Sesión 23.
 - **T2.4** Condición B (Centralizado por silo).
 - **T2.5** Condición C (Centralizado global). Referencia LightGBM en paralelo.
 - Integrar **Weights & Biases** desde aquí (trackear cada corrida y condición).
