@@ -3,8 +3,9 @@
 > Documento vivo. **Actualízalo al completar cada tarea** (marca hecho, anota lo aprendido).
 > Última actualización: 2026-07-21 — **FASE 1 completa y corregida** (T1.1-T1.5 + corrección Sesión
 > 19). **T2.1, T2.2 y T2.2b cerradas**: módulo de métricas, baselines ingenuos y baselines
-> convencionales (ETS/Holt-Winters + LightGBM por tienda — responde RQ2, ver Sesión 21: LightGBM
-> gana claramente incluso por mediana, primer resultado propio que corrobora la literatura citada).
+> convencionales (ETS/Holt-Winters + **LightGBM global**, responde RQ2). Corrección Sesión 22: el
+> LightGBM por tienda no batía ni al baseline ingenuo por falta de datos por modelo; sustituido por
+> un único modelo global (tuneado) que bate a media móvil y ETS en las tres métricas por mediana.
 > Próxima: **T2.3-T2.5** (condiciones A/B/C: local, centralizado por silo, centralizado global).
 
 ## ✅ Hecho
@@ -36,7 +37,8 @@
 - [x] **Corrección Sesión 19 (2026-07-20)**: el 25-dic no tiene ninguna fila en `train.csv` para ninguna tienda/familia (cierre por festivo, sin siquiera un registro de venta=0), lo que dejaba `dias_con_dato=6` esa semana → T1.3 la excluye correctamente como "parcial" → hueco interno real en 1.749/1.782 series. `groupby().shift()` avanza por posición, no por fecha, así que ese hueco desalineaba silenciosamente los lags de T1.4 justo después de cada Navidad. Corregido con `src/calendario_semanal.py` (reindexa cada serie a un calendario semanal completo, huecos=NaN, antes de cualquier shift/rolling). `dataset_features.parquet` regenerado: **322.245 filas** (antes 375.309). Test nuevo (`test_ninguna_fila_queda_justo_despues_de_un_hueco_interno`) formaliza el invariante. 17/17 tests pasan.
 - [x] **T2.1 cerrada (2026-07-18)**: `src/metrics.py` — WMAPE, MASE, RMSSE, comparación Wilcoxon pareada, `porcentaje_brecha_recuperada` (la métrica estrella del proyecto). 12/12 tests pasan. Ver RESEARCH_LOG Sesión 18.
 - [x] **T2.2 cerrada (2026-07-20)**: `src/10_baselines_ingenuos.py` — persistencia (t-1), estacional (t-52), media móvil (4 sem.), evaluados en val/test. Media móvil es el suelo de cordura más fuerte (WMAPE test=0,24); estacional el más débil (WMAPE test=0,38). Resultado en `reports/resultados_baselines.csv`. Ver RESEARCH_LOG Sesión 20.
-- [x] **T2.2b cerrada (2026-07-21)**: `src/11_baselines_convencionales.py` — ETS/Holt-Winters por serie y LightGBM por tienda (54 modelos). **LightGBM gana con claridad** (WMAPE test mediana: 0,14 vs 0,33 de ETS) — primer resultado propio que corrobora Petropoulos et al. (2024). Diagnóstico y corrección de una inestabilidad seria en ETS (tendencia sin amortiguar + prefijos de ceros estructurales por falta de surtido de familia → predicciones de millones de unidades para PRODUCE en varias tiendas); tras `damped_trend`, recorte de prefijo de ceros y techo de cordura (3× el máximo histórico de cada serie), la cola pesada restante es la limitación conocida de ETS ante demanda intermitente (PLAYERS AND ELECTRONICS, CELEBRATION, PET SUPPLIES...), no un bug. Nuevo gotcha de datos documentado: 779/1.749 series (45%) tienen un prefijo de ceros >4 semanas al inicio de train — no todas las tiendas venden todas las familias (`DATA.md` 2.6.3). Ver RESEARCH_LOG Sesión 21.
+- [x] **T2.2b cerrada (2026-07-21)**: `src/11_baselines_convencionales.py` — ETS/Holt-Winters por serie. Diagnóstico y corrección de una inestabilidad seria en ETS (tendencia sin amortiguar + prefijos de ceros estructurales por falta de surtido de familia → predicciones de millones de unidades para PRODUCE en varias tiendas); tras `damped_trend`, recorte de prefijo de ceros y techo de cordura (3× el máximo histórico de cada serie), la cola pesada restante es la limitación conocida de ETS ante demanda intermitente (PLAYERS AND ELECTRONICS, CELEBRATION, PET SUPPLIES...), no un bug. Nuevo gotcha de datos documentado: 779/1.749 series (45%) tienen un prefijo de ceros >4 semanas al inicio de train — no todas las tiendas venden todas las familias (`DATA.md` 2.6.3). Ver RESEARCH_LOG Sesión 21.
+- [x] **Corrección Sesión 22 (2026-07-21)**: el primer LightGBM (por tienda, 54 modelos, sin tuning) no superaba ni a la media móvil (T2.2). Tras tunear hiperparámetros (búsqueda aleatoria, 25 candidatos) y ampliar features (festivos, día de pago), seguía sin ganar — causa real: cada modelo por tienda entrenaba con ~5-6 mil filas y decidía early stopping sobre un val de solo ~264 filas, demasiado ruidoso. Sustituido por **un único LightGBM global** (`store_id`+`family_id` como categóricas, ~54x más datos por modelo) — bate a la media móvil y a ETS en WMAPE/MASE/RMSSE por mediana (WMAPE test 0,132 vs 0,138 y 0,334), cobertura 100%. `configs/lightgbm_hiperparametros.json` guardado para reproducibilidad. Ver RESEARCH_LOG Sesión 22.
 
 ## ▶️ PRÓXIMA TAREA — T2.3-T2.5 (Fase 2, condiciones A/B/C)
 
@@ -47,7 +49,7 @@
   `family_id`/`store_id` codificados. **322.245 filas** (Sesión 19). **Ojo: `val` tiene 53 tiendas (no
   54) — falta la tienda 52, ver `RESEARCH_LOG.md` Sesión 16.**
 - `reports/resultados_baselines.csv` — suelo de cordura (persistencia/estacional/media móvil).
-- `reports/resultados_baselines_convencionales.csv` — ETS/Holt-Winters y LightGBM por tienda (RQ2).
+- `reports/resultados_baselines_convencionales.csv` — ETS/Holt-Winters y LightGBM global (RQ2).
 - `src/calendario_semanal.py` — utilidad de reindexado semanal, reutilizable donde haga falta un
   `shift()`/`rolling()` calendario-correcto (T3, si se necesitara).
 

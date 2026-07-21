@@ -8,10 +8,19 @@ métodos convencionales de forecasting en retail?") son dos métodos con evidenc
 
   - ETS / Holt-Winters (suavizado exponencial con tendencia y estacionalidad) -- un modelo
     estadístico clásico, por serie (tienda×familia).
-  - LightGBM por tienda -- gradient boosting sobre árboles, el estándar de facto en
-    competiciones de forecasting como M5. Un modelo por tienda (no global, no por serie
-    individual), entrenado con las filas de todas sus familias -- así aprende patrones
-    compartidos entre familias de la misma tienda, igual que hará luego el modelo local (A).
+  - LightGBM -- gradient boosting sobre árboles, el estándar de facto en competiciones de
+    forecasting como M5.
+
+CORRECCIÓN (Sesión 22): el diseño original entrenaba un LightGBM POR TIENDA (54 modelos). Sin
+ajuste de hiperparámetros ni early stopping, ese diseño no llegaba a superar ni siquiera al
+baseline ingenuo más simple (media móvil de 4 semanas, T2.2) -- WMAPE test 0,394 vs 0,241. Al
+tunear hiperparámetros correctamente se detectó la causa: cada modelo por tienda entrena con muy
+pocos datos (~5-6 mil filas) y su early stopping decide sobre un val todavía más pequeño
+(~264 filas), demasiado ruidoso para una decisión estable. Un ÚNICO modelo LightGBM GLOBAL
+(`store_id` y `family_id` como categóricas, en vez de un modelo por tienda) tiene ~54x más datos
+de entrenamiento y bate con claridad al baseline en las tres métricas por mediana. Es, además, el
+mismo principio que motiva todo este TFM: compartir señal entre entidades (aquí, tiendas; en
+Fase 3, silos vía FedAvg) generaliza mejor que entrenar cada una por separado con poco dato.
 
 Ambos se entrenan SOLO con train y se evalúan sobre val/test con el módulo de métricas de T2.1,
 en escala natural de ventas (expm1 de la predicción en log) -- comparable directamente con
@@ -29,6 +38,7 @@ ajustado directamente sobre las filas tal cual (sin reindexar) asumiría implíc
 semanas son consecutivas, distorsionando la estacionalidad de 52 semanas. Los huecos (pocos por
 serie) se interpolan linealmente solo para dar continuidad a la serie de entrada del modelo.
 """
+import json
 import sys
 import warnings
 from pathlib import Path
@@ -44,6 +54,7 @@ from calendario_semanal import construir_calendario_completo
 
 PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
 REPORTS = Path(__file__).resolve().parents[1] / "reports"
+CONFIGS = Path(__file__).resolve().parents[1] / "configs"
 
 N_VAL = 8
 N_TEST = 8
@@ -58,8 +69,23 @@ FEATURES_LGBM = [
     "media_movil_log_4", "media_movil_log_8", "std_log_4",
     "log_onpromotion", "oil_price",
     "semana_sin", "semana_cos", "mes_sin", "mes_cos",
+    "es_festivo_nacional", "es_festivo_regional", "es_festivo_local", "semana_con_dia_pago",
     "family_id",
 ]
+
+# Sesión 22: espacio de búsqueda de hiperparámetros para el tuning de LightGBM. El primer
+# LightGBM (Sesión 21) usaba una configuración fija razonable pero SIN ajustar -- resultó no
+# batir ni siquiera a la media móvil de 4 semanas (T2.2) en WMAPE. Este espacio cubre los
+# hiperparámetros con más impacto en un GBM sobre un dataset tabular de tamaño modesto.
+ESPACIO_BUSQUEDA_LGBM = {
+    "objective": ["regression", "regression_l1"],
+    "learning_rate": [0.01, 0.02, 0.05, 0.08],
+    "num_leaves": [7, 15, 31, 63],
+    "min_child_samples": [5, 15, 30],
+    "feature_fraction": [0.7, 0.85, 1.0],
+    "bagging_fraction": [0.7, 0.85, 1.0],
+    "reg_lambda": [0.0, 0.5, 2.0],
+}
 
 
 # ============================================================ ETS por serie
@@ -172,37 +198,96 @@ def predicciones_ets(modelado: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(filas, ignore_index=True)
 
 
-# ============================================================ LightGBM por tienda
+# ============================================================ LightGBM (tuneado y global, Sesión 22)
 
-def predicciones_lightgbm(features: pd.DataFrame) -> pd.DataFrame:
-    """Un modelo LightGBM por tienda (54 modelos), entrenado con las filas de TRAIN de todas
-    sus familias, prediciendo log_ventas. No hace falta normalizar (los árboles son invariantes
-    a transformaciones monótonas de las features) -- se usan las columnas log_* sin z-score."""
-    filas = []
-    tiendas = sorted(features["store_nbr"].unique())
-    print(f"Entrenando LightGBM para {len(tiendas)} tiendas...")
-    for store in tiendas:
-        d = features[features.store_nbr == store]
-        train = d[d.split == "train"]
-        eval_ = d[d.split.isin(["val", "test"])]
-        if len(train) < 20 or len(eval_) == 0:
-            continue
+def _wmape_natural(y_true_log: np.ndarray, y_pred_log: np.ndarray) -> float:
+    """WMAPE agregado en escala natural de ventas, a partir de predicciones en log_ventas --
+    la métrica que de verdad importa (no la pérdida de entrenamiento en escala log)."""
+    y_true = np.expm1(y_true_log)
+    y_pred = np.clip(np.expm1(y_pred_log), 0, None)
+    denom = np.abs(y_true).sum()
+    return float(np.abs(y_true - y_pred).sum() / denom) if denom > 0 else np.nan
 
-        modelo = lgb.LGBMRegressor(
-            objective="regression", n_estimators=200, learning_rate=0.05,
-            num_leaves=15, min_child_samples=5, verbosity=-1, random_state=42,
-        )
+
+def buscar_hiperparametros_lgbm(features: pd.DataFrame, n_candidatos: int = 25, semilla: int = 42) -> dict:
+    """Búsqueda aleatoria de hiperparámetros sobre el dataset AGRUPADO de las 54 tiendas (con
+    `store_id` como feature categórica) -- el mismo dataset agrupado que usa el modelo FINAL
+    (ver `predicciones_lightgbm`), así que esta búsqueda ya optimiza para la configuración que
+    realmente se despliega, no para un proxy distinto.
+
+    Selección por WMAPE en escala natural sobre val (no por la pérdida de entrenamiento en log) --
+    es la métrica que se usa para comparar contra los demás baselines."""
+    train = features[features.split == "train"]
+    val = features[features.split == "val"]
+    cols = FEATURES_LGBM + ["store_id"]
+
+    claves = list(ESPACIO_BUSQUEDA_LGBM.keys())
+    candidatos = []
+    for i in range(n_candidatos):
+        rng_i = np.random.RandomState(semilla + i)  # semilla independiente por candidato
+        candidatos.append({k: rng_i.choice(ESPACIO_BUSQUEDA_LGBM[k]) for k in claves})
+
+    mejor_config, mejor_wmape = None, np.inf
+    print(f"Buscando hiperparámetros de LightGBM ({n_candidatos} candidatos, dataset agrupado)...")
+    for i, config in enumerate(candidatos, start=1):
+        config = {k: (v.item() if hasattr(v, "item") else v) for k, v in config.items()}
+        modelo = lgb.LGBMRegressor(n_estimators=500, verbosity=-1, random_state=semilla, **config)
         modelo.fit(
-            train[FEATURES_LGBM], train["log_ventas"],
-            categorical_feature=["family_id"],
+            train[cols], train["log_ventas"],
+            categorical_feature=["family_id", "store_id"],
+            eval_set=[(val[cols], val["log_ventas"])],
+            callbacks=[lgb.early_stopping(30, verbose=False), lgb.log_evaluation(0)],
         )
-        pred_log = modelo.predict(eval_[FEATURES_LGBM])
+        wmape = _wmape_natural(val["log_ventas"].values, modelo.predict(val[cols]))
+        if wmape < mejor_wmape:
+            mejor_wmape, mejor_config = wmape, config
+        if i % 5 == 0:
+            print(f"  {i}/{n_candidatos} candidatos -- mejor WMAPE(val) hasta ahora: {mejor_wmape:.4f}")
 
-        fila = eval_[["store_nbr", "family", "week_start", "split"]].copy()
-        fila["pred_lightgbm"] = np.clip(np.expm1(pred_log), 0, None)  # ventas no pueden ser negativas
-        filas.append(fila)
+    print(f"Mejor configuración (WMAPE val agrupado={mejor_wmape:.4f}): {mejor_config}")
+    return mejor_config
 
-    return pd.concat(filas, ignore_index=True)
+
+def predicciones_lightgbm(features: pd.DataFrame, config: dict) -> pd.DataFrame:
+    """UN ÚNICO modelo LightGBM GLOBAL (no por tienda), con `store_id` y `family_id` como
+    categóricas, entrenado con TODAS las filas de train y prediciendo log_ventas. No hace falta
+    normalizar (los árboles son invariantes a transformaciones monótonas) -- se usan las
+    columnas log_* sin z-score.
+
+    Corrección de diseño (Sesión 22): la primera versión (Sesión 21) entrenaba un modelo POR
+    TIENDA (54 modelos) -- con hiperparámetros sin ajustar, ni siquiera batía al baseline
+    ingenuo más simple (media móvil, T2.2). Al tunear correctamente se detectó la causa: cada
+    modelo por tienda entrena con muy pocos datos (~5-6 mil filas) y decide cuándo parar
+    (early stopping) sobre un val todavía más pequeño (~264 filas) -- demasiado ruidoso para una
+    decisión estable. Un modelo GLOBAL tiene ~54x más datos de entrenamiento y bate con claridad
+    al baseline en las tres métricas por mediana (ver RESEARCH_LOG Sesión 22). El número de
+    árboles se decide por early stopping sobre TODO val (mucho más estable que el val de una
+    sola tienda).
+
+    Nota metodológica: al usar val para decidir cuándo parar, val deja de ser una estimación
+    limpia de generalización para ESTE modelo (sí lo sigue siendo para
+    persistencia/estacional/media móvil/ETS, que no usan val en su ajuste) -- la comparación
+    justa contra los demás baselines es la de TEST, que nunca se toca durante el ajuste ni la
+    búsqueda de hiperparámetros."""
+    cols = FEATURES_LGBM + ["store_id"]
+    train = features[features.split == "train"]
+    val = features[features.split == "val"]
+    eval_ = features[features.split.isin(["val", "test"])]
+
+    print("Entrenando LightGBM global (tuneado, store_id + family_id como categóricas)...")
+    modelo = lgb.LGBMRegressor(n_estimators=5000, verbosity=-1, random_state=42, **config)
+    modelo.fit(
+        train[cols], train["log_ventas"],
+        categorical_feature=["family_id", "store_id"],
+        eval_set=[(val[cols], val["log_ventas"])],
+        callbacks=[lgb.early_stopping(80, verbose=False), lgb.log_evaluation(0)],
+    )
+    print(f"  árboles usados (early stopping): {modelo.best_iteration_}")
+
+    pred_log = modelo.predict(eval_[cols])
+    predicciones = eval_[["store_nbr", "family", "week_start", "split"]].copy()
+    predicciones["pred_lightgbm"] = np.clip(np.expm1(pred_log), 0, None)  # ventas no negativas
+    return predicciones
 
 
 # ============================================================ evaluación (T2.1)
@@ -229,12 +314,17 @@ def main() -> None:
     features = pd.read_parquet(PROCESSED / "dataset_features.parquet")
 
     pred_ets = predicciones_ets(modelado)
-    pred_lgbm = predicciones_lightgbm(features)
+
+    config_lgbm = buscar_hiperparametros_lgbm(features)
+    CONFIGS.mkdir(parents=True, exist_ok=True)
+    with open(CONFIGS / "lightgbm_hiperparametros.json", "w", encoding="utf-8") as f:
+        json.dump(config_lgbm, f, indent=2, ensure_ascii=False)
+    pred_lgbm = predicciones_lightgbm(features, config_lgbm)
 
     filas_resumen = []
     for nombre, preds, col, fuente in [
         ("ETS/Holt-Winters", pred_ets, "pred_ets", modelado),
-        ("LightGBM (por tienda)", pred_lgbm, "pred_lightgbm", features),
+        ("LightGBM (global)", pred_lgbm, "pred_lightgbm", features),
     ]:
         print(f"\n{'=' * 60}\n{nombre}\n{'=' * 60}")
         for split in ["val", "test"]:

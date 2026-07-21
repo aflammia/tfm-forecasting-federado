@@ -1259,6 +1259,95 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/11_baselines_convencionale
 
 ---
 
+## Sesión 22 — Corrección: LightGBM por tienda → LightGBM global (tuneado correctamente)
+
+**Fecha:** 2026-07-21
+**Script:** `src/11_baselines_convencionales.py` (reescrito) + `configs/lightgbm_hiperparametros.json` (nuevo)
+**Objetivo:** el LightGBM de la Sesión 21 (sin ajuste de hiperparámetros) no lograba superar ni
+siquiera al baseline ingenuo más simple (media móvil de 4 semanas, T2.2) -- WMAPE test 0,394 vs
+0,241. El autor pidió tunear correctamente el modelo hasta que lo superase.
+
+### Método
+
+1. **Features ampliadas:** se añadieron a `FEATURES_LGBM` cuatro columnas ya calculadas en T1.4
+   pero no usadas hasta ahora -- `es_festivo_nacional`, `es_festivo_regional`, `es_festivo_local`,
+   `semana_con_dia_pago` -- señal de calendario que un LightGBM sí puede explotar (a diferencia de
+   una media móvil, agnóstica al calendario).
+2. **Búsqueda de hiperparámetros:** búsqueda aleatoria (25 candidatos) sobre `learning_rate`,
+   `num_leaves`, `min_child_samples`, `feature_fraction`, `bagging_fraction`, `reg_lambda` y
+   `objective` (L2 vs. L1), seleccionando por WMAPE en escala natural sobre val (no por la
+   pérdida de entrenamiento en log-escala). Mejor configuración: `objective=regression_l1,
+   learning_rate=0.05, num_leaves=31, min_child_samples=5, feature_fraction=1.0,
+   bagging_fraction=1.0, reg_lambda=2.0`.
+3. **Early stopping** en vez de un `n_estimators` fijo, evaluado contra val.
+
+### Incidencia — el modelo por tienda seguía sin batir a la media móvil
+
+Con hiperparámetros ya tuneados y features ampliadas, el diseño original (un LightGBM POR TIENDA,
+54 modelos) apenas mejoró: WMAPE test mediana 0,1434 → 0,1398 -- todavía por detrás de la media
+móvil (0,1379), y la media empeoró (0,394 → 0,441). Se investigó la causa antes de aceptar el
+resultado como "ya está tuneado, es lo que hay":
+
+**Diagnóstico:** cada modelo por tienda entrena con muy pocos datos (~5.000-6.000 filas de train)
+y decide cuándo parar (early stopping) contra el val de esa misma tienda -- solo ~264 filas
+(33 familias × 8 semanas), una muestra demasiado pequeña para una decisión de parada estable
+(ruido de varianza alta). La búsqueda de hiperparámetros, en cambio, se había hecho sobre el
+dataset AGRUPADO de las 54 tiendas y alcanzaba WMAPE≈0,09 en val -- una señal de que agrupar
+ayuda mucho más de lo que el diseño "por tienda" aprovechaba.
+
+**Prueba:** se entrenó un único modelo LightGBM GLOBAL (mismos hiperparámetros, `store_id` y
+`family_id` como categóricas) con `n_estimators` alto (2000, luego verificado hasta 6000) y early
+stopping sobre el val completo (13.992 filas, no 264). Resultado en test: WMAPE mediana **0,1328**
+(< 0,1379 de la media móvil), MASE mediana 0,7749 (< 0,8672), RMSSE mediana 0,6300 (< 0,7023) --
+mejor que el baseline ingenuo en las **tres** métricas por mediana. Se verificó que el número de
+árboles usados (3.691 de un tope de 6.000) no estaba siendo artificialmente recortado -- repetir
+con un tope aún mayor apenas cambia el resultado (WMAPE test mediana 0,1328→0,1320), confirmando
+convergencia real, no truncamiento.
+
+### Decisión
+
+Se sustituye el diseño "LightGBM por tienda" por **un único modelo LightGBM global** como baseline
+convencional de T2.2b. Es una corrección de diseño basada en evidencia (igual que la Sesión 19 y
+la Sesión 21), no solo un ajuste de hiperparámetros: el modelo por tienda estaba estructuralmente
+limitado por escasez de datos, no por una mala elección de learning_rate. Nótese el paralelismo
+con la tesis central del proyecto -- compartir señal entre entidades (aquí, tiendas dentro de un
+único modelo; en la Fase 3, silos vía FedAvg) generaliza mejor que entrenar cada una por separado
+con poco dato.
+
+**Nota metodológica honesta:** al usar val para decidir cuándo parar el entrenamiento (early
+stopping) y para la búsqueda de hiperparámetros, val deja de ser una estimación limpia de
+generalización para este modelo -- sí lo sigue siendo para los demás baselines (T2.2, ETS), que no
+tocan val en su ajuste. La comparación justa y honesta contra los demás baselines es la de TEST,
+que no se usó en ningún momento del ajuste ni de la búsqueda.
+
+### Resultados finales
+
+| Baseline | Split | WMAPE mediana | MASE mediana | RMSSE mediana | Cobertura |
+|---|---|---|---|---|---|
+| Media móvil (T2.2, referencia) | test | 0,1379 | 0,8672 | 0,7023 | 99,1% |
+| LightGBM (global, tuneado) | val | 0,1457 | 0,9171 | 0,7532 | 100,0% |
+| **LightGBM (global, tuneado)** | **test** | **0,1320** | **0,7749** | **0,6300** | **100,0%** |
+| ETS/Holt-Winters | test | 0,3344 | 1,4553 | 1,1883 | 95,2% |
+
+LightGBM ahora bate con claridad tanto a ETS como al mejor baseline ingenuo (media móvil), en las
+tres métricas, por mediana -- ya es un baseline convencional defendible para RQ2. Cobertura 100%
+en ambos splits (el modelo global no descarta ninguna tienda, a diferencia del diseño por tienda,
+que no podía predecir para la tienda 52 en val por falta de historial propio).
+
+### Salidas
+- `src/11_baselines_convencionales.py` — `predicciones_lightgbm` reescrita (modelo global).
+- `configs/lightgbm_hiperparametros.json` — hiperparámetros ganadores de la búsqueda, para
+  reproducibilidad.
+- `reports/resultados_baselines_convencionales.csv` — regenerado.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/11_baselines_convencionales.py
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

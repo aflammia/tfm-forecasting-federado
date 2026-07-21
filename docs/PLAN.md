@@ -92,13 +92,18 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
 - **T2.2** ✅ **Cerrada (2026-07-20).** `src/10_baselines_ingenuos.py` — persistencia, estacional-52,
   media móvil-4, evaluados en val/test. Media móvil es el más fuerte (WMAPE test=0,24); estacional el
   más débil (WMAPE test=0,38). Resultado en `reports/resultados_baselines.csv`. Ver Sesión 20.
-- **T2.2b** ✅ **Cerrada (2026-07-21).** `src/11_baselines_convencionales.py` — ETS/Holt-Winters por
-  serie y LightGBM por tienda (54 modelos). LightGBM supera claramente a ETS incluso por mediana
-  (WMAPE test 0,14 vs 0,33) — primer resultado propio que corrobora Petropoulos et al. (2024).
-  Diagnóstico e corrección de una inestabilidad seria en ETS (tendencia sin amortiguar +
-  prefijos de ceros estructurales por falta de surtido → predicciones de millones de unidades);
-  tras corregir, la cola pesada restante (31% de series con algún error >3×) es una limitación
-  conocida de suavizado exponencial clásico ante demanda intermitente, no un bug. Ver Sesión 21.
+- **T2.2b** ✅ **Cerrada y corregida (2026-07-21).** `src/11_baselines_convencionales.py` —
+  ETS/Holt-Winters por serie + LightGBM. Diagnóstico y corrección de una inestabilidad seria en
+  ETS (tendencia sin amortiguar + prefijos de ceros estructurales por falta de surtido →
+  predicciones de millones de unidades); tras corregir, la cola pesada restante (31% de series
+  con algún error >3×) es una limitación conocida de suavizado exponencial ante demanda
+  intermitente, no un bug (Sesión 21). **Corrección (Sesión 22):** el primer LightGBM (por
+  tienda, 54 modelos) no superaba ni siquiera a la media móvil (T2.2) — causa: cada modelo
+  entrenaba con muy pocos datos y decidía early stopping sobre un val demasiado pequeño y
+  ruidoso. Sustituido por **un único LightGBM global** (`store_id`+`family_id` como categóricas,
+  hiperparámetros tuneados por búsqueda aleatoria) — bate a la media móvil y a ETS en las tres
+  métricas por mediana (WMAPE test 0,132 vs 0,138 y 0,334). Primer resultado propio que corrobora
+  Petropoulos et al. (2024) con un baseline que de verdad gana.
 - **T2.3** Condición A (Local): un modelo pequeño por tienda.
 - **T2.4** Condición B (Centralizado por silo).
 - **T2.5** Condición C (Centralizado global). Referencia LightGBM en paralelo.
