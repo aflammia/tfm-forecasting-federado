@@ -1,11 +1,11 @@
 # STATE.md — Estado actual y próxima tarea
 
 > Documento vivo. **Actualízalo al completar cada tarea** (marca hecho, anota lo aprendido).
-> Última actualización: 2026-07-20 — **FASE 1 completa y corregida** (T1.1-T1.5 + corrección Sesión
-> 19: hueco interno de Navidad en 1.749/1.782 series desalineaba los lags de T1.4 por `shift()`
-> posicional; corregido con `src/calendario_semanal.py`, dataset regenerado a 322.245 filas). **T2.1
-> y T2.2 cerradas** (módulo de métricas + baselines ingenuos, ver Sesiones 18 y 20). Próxima: **T2.2b**
-> (LightGBM + ETS/Holt-Winters, responde RQ2).
+> Última actualización: 2026-07-21 — **FASE 1 completa y corregida** (T1.1-T1.5 + corrección Sesión
+> 19). **T2.1, T2.2 y T2.2b cerradas**: módulo de métricas, baselines ingenuos y baselines
+> convencionales (ETS/Holt-Winters + LightGBM por tienda — responde RQ2, ver Sesión 21: LightGBM
+> gana claramente incluso por mediana, primer resultado propio que corrobora la literatura citada).
+> Próxima: **T2.3-T2.5** (condiciones A/B/C: local, centralizado por silo, centralizado global).
 
 ## ✅ Hecho
 
@@ -36,20 +36,25 @@
 - [x] **Corrección Sesión 19 (2026-07-20)**: el 25-dic no tiene ninguna fila en `train.csv` para ninguna tienda/familia (cierre por festivo, sin siquiera un registro de venta=0), lo que dejaba `dias_con_dato=6` esa semana → T1.3 la excluye correctamente como "parcial" → hueco interno real en 1.749/1.782 series. `groupby().shift()` avanza por posición, no por fecha, así que ese hueco desalineaba silenciosamente los lags de T1.4 justo después de cada Navidad. Corregido con `src/calendario_semanal.py` (reindexa cada serie a un calendario semanal completo, huecos=NaN, antes de cualquier shift/rolling). `dataset_features.parquet` regenerado: **322.245 filas** (antes 375.309). Test nuevo (`test_ninguna_fila_queda_justo_despues_de_un_hueco_interno`) formaliza el invariante. 17/17 tests pasan.
 - [x] **T2.1 cerrada (2026-07-18)**: `src/metrics.py` — WMAPE, MASE, RMSSE, comparación Wilcoxon pareada, `porcentaje_brecha_recuperada` (la métrica estrella del proyecto). 12/12 tests pasan. Ver RESEARCH_LOG Sesión 18.
 - [x] **T2.2 cerrada (2026-07-20)**: `src/10_baselines_ingenuos.py` — persistencia (t-1), estacional (t-52), media móvil (4 sem.), evaluados en val/test. Media móvil es el suelo de cordura más fuerte (WMAPE test=0,24); estacional el más débil (WMAPE test=0,38). Resultado en `reports/resultados_baselines.csv`. Ver RESEARCH_LOG Sesión 20.
+- [x] **T2.2b cerrada (2026-07-21)**: `src/11_baselines_convencionales.py` — ETS/Holt-Winters por serie y LightGBM por tienda (54 modelos). **LightGBM gana con claridad** (WMAPE test mediana: 0,14 vs 0,33 de ETS) — primer resultado propio que corrobora Petropoulos et al. (2024). Diagnóstico y corrección de una inestabilidad seria en ETS (tendencia sin amortiguar + prefijos de ceros estructurales por falta de surtido de familia → predicciones de millones de unidades para PRODUCE en varias tiendas); tras `damped_trend`, recorte de prefijo de ceros y techo de cordura (3× el máximo histórico de cada serie), la cola pesada restante es la limitación conocida de ETS ante demanda intermitente (PLAYERS AND ELECTRONICS, CELEBRATION, PET SUPPLIES...), no un bug. Nuevo gotcha de datos documentado: 779/1.749 series (45%) tienen un prefijo de ceros >4 semanas al inicio de train — no todas las tiendas venden todas las familias (`DATA.md` 2.6.3). Ver RESEARCH_LOG Sesión 21.
 
-## ▶️ PRÓXIMA TAREA — T2.2b (Fase 2, RQ2)
+## ▶️ PRÓXIMA TAREA — T2.3-T2.5 (Fase 2, condiciones A/B/C)
 
-**T1.1 a T1.5 (+ corrección Sesión 19), T2.1 y T2.2 cerradas.**
+**T1.1 a T1.5 (+ corrección Sesión 19), T2.1, T2.2 y T2.2b cerradas.**
 - `data/processed/stores_silos.csv` — silos Propuesta 2.
 - `data/processed/dataset_modelado.parquet` — con columna `split`, sin fuga temporal.
 - `data/processed/dataset_features.parquet` — **el dataset final**: lags, medias móviles, `log_ventas`,
   `family_id`/`store_id` codificados. **322.245 filas** (Sesión 19). **Ojo: `val` tiene 53 tiendas (no
   54) — falta la tienda 52, ver `RESEARCH_LOG.md` Sesión 16.**
 - `reports/resultados_baselines.csv` — suelo de cordura (persistencia/estacional/media móvil).
+- `reports/resultados_baselines_convencionales.csv` — ETS/Holt-Winters y LightGBM por tienda (RQ2).
+- `src/calendario_semanal.py` — utilidad de reindexado semanal, reutilizable donde haga falta un
+  `shift()`/`rolling()` calendario-correcto (T3, si se necesitara).
 
-**T2.2b — Baselines convencionales de retail (responde RQ2):** suavizado exponencial (ETS/Holt-Winters,
-`statsmodels`) y LightGBM por tienda — el estándar de facto en competiciones de forecasting (M5).
-Necesario para poder afirmar "supera a los métodos convencionales" con evidencia.
+**T2.3-T2.5 — Condiciones A (Local), B (Centralizado por silo), C (Centralizado global):** entrenar
+el MLP+embeddings (arquitectura fijada en la Sesión 5) bajo los tres regímenes de agregación de
+datos, evaluar con el mismo módulo de métricas (T2.1) y comparar contra los baselines ya cerrados
+(T2.2/T2.2b). A partir de aquí, integrar **Weights & Biases** para trackear cada corrida.
 
 ## ⏳ Pendiente de decisión / acción del usuario
 

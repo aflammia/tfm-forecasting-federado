@@ -92,7 +92,13 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
 - **T2.2** ✅ **Cerrada (2026-07-20).** `src/10_baselines_ingenuos.py` — persistencia, estacional-52,
   media móvil-4, evaluados en val/test. Media móvil es el más fuerte (WMAPE test=0,24); estacional el
   más débil (WMAPE test=0,38). Resultado en `reports/resultados_baselines.csv`. Ver Sesión 20.
-- **T2.2b** Baselines convencionales de retail — **lo que responde RQ2**: suavizado exponencial (ETS/Holt-Winters) y **LightGBM por tienda** (el estándar de facto en la industria y en competiciones de forecasting como M5). Sin esto, "supera a los métodos convencionales" quedaría sin demostrar.
+- **T2.2b** ✅ **Cerrada (2026-07-21).** `src/11_baselines_convencionales.py` — ETS/Holt-Winters por
+  serie y LightGBM por tienda (54 modelos). LightGBM supera claramente a ETS incluso por mediana
+  (WMAPE test 0,14 vs 0,33) — primer resultado propio que corrobora Petropoulos et al. (2024).
+  Diagnóstico e corrección de una inestabilidad seria en ETS (tendencia sin amortiguar +
+  prefijos de ceros estructurales por falta de surtido → predicciones de millones de unidades);
+  tras corregir, la cola pesada restante (31% de series con algún error >3×) es una limitación
+  conocida de suavizado exponencial clásico ante demanda intermitente, no un bug. Ver Sesión 21.
 - **T2.3** Condición A (Local): un modelo pequeño por tienda.
 - **T2.4** Condición B (Centralizado por silo).
 - **T2.5** Condición C (Centralizado global). Referencia LightGBM en paralelo.

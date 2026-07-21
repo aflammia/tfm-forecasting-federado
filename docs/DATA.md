@@ -97,6 +97,23 @@ date, type, locale, locale_name, description, transferred
 
 **2.6.2 — Ya documentado en la Sesión 3:** terremoto de Ecuador de abril 2016 (pico de ventas atípico) — se maneja con Huber loss (Sesión 5).
 
+**2.6.3 — No todas las tiendas venden todas las familias desde el inicio (encontrado en Sesión 21,
+diagnosticando T2.2b):** el gotcha 2.6.1 trata la apertura tardía a nivel *tienda*, pero el mismo
+fenómeno ocurre a nivel *tienda×familia* dentro de tiendas ya abiertas — **779 de 1.749 series
+(45%) tienen un prefijo de más de 4 semanas de venta=0 al inicio de train**, en algunos casos casi
+todo el periodo (p.ej. una tienda que prácticamente no vende LADIESWEAR o BOOKS). Es coherente con
+que no todos los formatos de tienda tengan el mismo surtido (una tienda pequeña no necesariamente
+vende ropa o libros). **Impacto:** igual que 2.6.1 pero más granular — ese prefijo de ceros no es
+"sin demanda", es "sin surtido de esa familia todavía", y contamina el ajuste de cualquier modelo
+que asuma una serie temporal continua y homogénea (afectó gravemente a ETS en T2.2b — ver
+RESEARCH_LOG Sesión 21). No se corrigió retroactivamente en T1.2/T1.4 (los lags/medias móviles de
+T1.4 y los modelos basados en árboles como LightGBM no se ven afectados de la misma forma: un
+prefijo de ceros reales no rompe un `shift()` ni una división en árbol, solo distorsiona modelos
+que estiman explícitamente tendencia/estacionalidad sobre la serie completa). **Relevante para
+Fase 3 (federado):** si el modelo MLP+embeddings entrena con estas series de ceros estructurales
+sin más tratamiento, conviene vigilar que no aprenda a "predecir cero" de forma perezosa para
+familias de bajo surtido — pendiente de revisar al llegar a T2.3+.
+
 ---
 
 ## 3. Granularidad: la cruda vs. la de modelado

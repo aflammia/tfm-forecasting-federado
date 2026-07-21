@@ -1145,6 +1145,120 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/10_baselines_ingenuos.py
 
 ---
 
+## Sesión 21 — T2.2b: baselines convencionales (ETS/Holt-Winters + LightGBM por tienda)
+
+**Fecha:** 2026-07-21
+**Scripts:** `src/11_baselines_convencionales.py`, `tests/test_baselines_convencionales.py`
+**Objetivo:** implementar los dos baselines que responden RQ2 ("¿supera el federado a los métodos
+convencionales de forecasting en retail?") — ETS/Holt-Winters por serie y LightGBM por tienda —
+sobre el dataset ya corregido en la Sesión 19.
+
+### Método
+
+- **ETS/Holt-Winters:** un modelo por serie (tienda×familia), ajustado una vez sobre `log_ventas`
+  de train (usando `dataset_modelado.parquet`, no `dataset_features.parquet`, para no perder las
+  ~8 semanas iniciales que T1.4 recorta por el warm-up de sus lags — ETS no usa esos lags) y
+  pronosticado a 16 pasos (8 de val + 8 de test) de una sola vez, sin reentrenar semana a semana
+  (el estándar en evaluación de baselines de horizonte fijo). Degrada el modelo según el
+  historial disponible: estacional+tendencia (≥104 semanas) → solo tendencia (≥10) → nivel simple
+  (≥2) → NaN. Reutiliza `calendario_semanal.py` (Sesión 19) para reindexar cada serie antes de
+  ajustar, por la misma razón que T1.4/T2.2: un hueco interno sin reindexar distorsionaría la
+  estacionalidad de 52 semanas que ETS asume.
+- **LightGBM por tienda:** un modelo por tienda (54 modelos), entrenado con las filas de TRAIN de
+  `dataset_features.parquet` de todas sus familias (aprende patrones compartidos entre familias de
+  la misma tienda), prediciendo `log_ventas`. Sin normalización (los árboles son invariantes a
+  transformaciones monótonas).
+
+Ambos se evalúan sobre val/test con el módulo de métricas de T2.1, en escala natural de ventas
+(`expm1` de la predicción).
+
+### Incidencia y diagnóstico — ETS con tendencia sin amortiguar explota exponencialmente
+
+La primera ejecución dio resultados absurdos: WMAPE_media de **3,44 en test**, con WMAPE_mediana de
+solo 0,36 — un desajuste medía/mediana enorme, señal inequívoca de que unas pocas series estaban
+produciendo errores catastróficos que dominaban el promedio. Se investigó antes de aceptar el
+número, siguiendo la misma disciplina de la Sesión 19:
+
+1. Se identificaron las filas con mayor error absoluto: predicciones de **hasta 2,6 millones de
+   unidades** para una serie (tienda 53, PRODUCE) cuya venta real esa semana era ~15.800 unidades.
+2. **Primera causa identificada:** `ExponentialSmoothing` con `trend="add"` sin amortiguar
+   extrapola la tendencia linealmente sin límite; al deshacer `log1p` con `expm1`, ese error
+   lineal se vuelve **exponencial** en escala de ventas. Corrección: `damped_trend=True`. Mejora
+   parcial (WMAPE_media test baja de 3,44 a 2,29) pero el problema persiste.
+3. **Segunda causa identificada** (inspeccionando la serie ofensora completa): la tienda 36,
+   familia PRODUCE, tiene **ventas=0 durante las primeras ~30 semanas de train** (2013-05 a
+   2013-12) y luego un salto abrupto a ventas normales — la familia no se vendía en esa tienda
+   hasta bien entrado el periodo observado. Generalizando la comprobación: **779 de 1.749 series
+   (45%) tienen un prefijo de más de 4 semanas de ceros al inicio de train** — no es ruido, es
+   ausencia estructural de venta (no todas las tiendas tienen surtido de todas las 33 familias;
+   ver `DATA.md`). Este prefijo, incluido tal cual en el ajuste de ETS, rompe la estimación de
+   nivel/tendencia/estacionalidad inicial (`initialization_method`, tanto `"estimated"` como
+   `"heuristic"` fallan igual). Corrección: `_recortar_ceros_iniciales()`, análoga a la fecha de
+   apertura de T1.2 pero a nivel tienda×familia — recorta el prefijo de ceros antes de reindexar
+   y ajustar.
+4. Con ambas correcciones, el peor caso individual bajó de 2,6 millones a ~280.000 (tienda
+   44/PRODUCE, venta real ~70.000) — la estacionalidad seguía mal estimada en series con historial
+   post-lanzamiento corto e irregular (solo ~3 ciclos anuales, con huecos internos adicionales
+   durante el periodo de adopción). Se decidió **no perseguir una estimación estacional perfecta**
+   para estas series (ETS/Croston es un problema documentado en la literatura para demanda
+   intermitente, no un objetivo de este TFM) y en su lugar añadir un **techo de cordura**: la
+   predicción se acota a `3×` el máximo histórico de esa misma serie — una predicción a 300× el
+   máximo observado no es un punto razonable bajo ninguna interpretación, y esta es la práctica
+   estándar de guardrail en sistemas de forecasting productivos.
+
+### Alcance final del problema (tras las 3 correcciones)
+
+Con las tres correcciones (`damped_trend`, recorte de prefijo, techo de cordura), **526 de 1.696
+series (31%)** aún tienen al menos una predicción que se desvía >3× de la venta real en alguna
+semana — concentradas en **familias de demanda intermitente/esporádica**: PLAYERS AND ELECTRONICS,
+CELEBRATION, HOME CARE, PRODUCE, PET SUPPLIES, SCHOOL AND OFFICE SUPPLIES. Esto es consistente con
+una limitación **conocida y documentada en la literatura** de suavizado exponencial clásico frente
+a demanda intermitente (motivo histórico de la existencia del método de Croston) — no un error del
+pipeline. Percentiles de WMAPE por serie en test: mediana=0,33, p90=3,54, p95=4,80, p99=11,03,
+máximo=893,6 (una cola derecha pesada pero ahora acotada y explicable, no un artefacto sin límite).
+
+**Decisión:** no seguir ajustando ETS más allá de estas tres correcciones — perseguir una
+estimación estacional perfecta para demanda intermitente (p.ej. implementar Croston) sería
+sobre-ingeniería para lo que es un baseline de comparación, no el resultado central del TFM. Se
+reporta **tanto la media como la mediana** de WMAPE/MASE/RMSSE (ya el formato estándar de T2.1/T2.2),
+señalando explícitamente que la mediana es más representativa del comportamiento "típico" de ETS
+dado esta cola pesada conocida, mientras que la media queda dominada por la minoría de series de
+demanda intermitente.
+
+### Resultados finales
+
+| Baseline | Split | WMAPE (media) | WMAPE (mediana) | MASE (media) | MASE (mediana) | RMSSE (media) | RMSSE (mediana) | Cobertura |
+|---|---|---|---|---|---|---|---|---|
+| ETS/Holt-Winters | val | 0,613 | 0,254 | 3,823 | 1,309 | 2,510 | 1,071 | 95,2% |
+| ETS/Holt-Winters | test | 1,946 | 0,334 | 7,248 | 1,455 | 4,089 | 1,188 | 95,2% |
+| LightGBM (por tienda) | val | 0,259 | 0,165 | 1,420 | 1,049 | 1,086 | 0,854 | 100,0% |
+| LightGBM (por tienda) | test | 0,394 | 0,143 | 1,386 | 0,896 | 1,001 | 0,722 | 98,1% |
+
+**Interpretación:** incluso comparando por mediana (la estadística robusta), LightGBM supera
+claramente a ETS en test (WMAPE 0,143 vs 0,334) — consistente con la evidencia de Petropoulos et
+al. (2024) ya citada, que sitúa a los métodos basados en árboles por delante de los métodos
+estadísticos clásicos en forecasting de retail. Este es el primer resultado empírico propio del
+proyecto que corrobora esa cita. La cobertura de ETS en val/test es 95,2% (algo menor que
+LightGBM) porque las series completamente sin ventas en train (recortadas a vacío por
+`_recortar_ceros_iniciales`) no pueden pronosticarse — coherente con la limitación ya documentada de
+que no todas las tiendas venden todas las familias.
+
+### Salidas
+- `src/11_baselines_convencionales.py` — ETS por serie + LightGBM por tienda.
+- `src/calendario_semanal.py` — reutilizado sin cambios (Sesión 19).
+- `tests/test_baselines_convencionales.py` — 10 tests (recorte de ceros, reindexado/interpolación,
+  degradación de ETS, horizonte, esquema de features de LightGBM).
+- `reports/resultados_baselines_convencionales.csv` — resumen agregado.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/11_baselines_convencionales.py
+./.venv/Scripts/python.exe -m pytest tests/ -v
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown
