@@ -1423,6 +1423,100 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/12_condicion_a_local.py
 
 ---
 
+## Sesión 24 — T2.4-T2.5: Condiciones B y C — la centralización no siempre gana
+
+**Fecha:** 2026-07-21
+**Scripts:** `src/13_condicion_b_silo.py`, `src/14_condicion_c_global.py`
+**Objetivo:** entrenar las dos condiciones centralizadas restantes con el mismo `modelo_mlp.py`
+de la Sesión 23 — B (un modelo por silo, 3 modelos) y C (un único modelo con las 54 tiendas, el
+"techo" en la práctica inviable) — y compararlas con A (Local, Sesión 23).
+
+### Método
+
+Sin cambios en la arquitectura ni en `entrenar()` (mismos hiperparámetros que A: Huber+Adam,
+early stopping con paciencia=15) — solo cambia el agrupamiento de filas que se le pasa: por
+`silo` en B (3 modelos), sin agrupar en C (1 modelo con todo `train`).
+
+### Resultado inesperado — B y C rinden PEOR que A
+
+| Condición | Split | WMAPE mediana | MASE mediana | RMSSE mediana |
+|---|---|---|---|---|
+| A — Local (54 modelos) | test | **0,1476** | **0,9283** | **0,7501** |
+| B — Centralizado por silo (3 modelos) | test | 0,1676 | 1,0423 | 0,8256 |
+| C — Centralizado global (1 modelo) | test | 0,1736 | 1,1317 | 0,8832 |
+
+Degradación **monótona y consistente** en las tres métricas: cuantas más tiendas heterogéneas se
+mezclan en un mismo modelo, peor es el error típico por serie -- a pesar de que C ve ~54× más
+datos que cualquier modelo de A. No es el resultado esperado ingenuamente ("más datos = mejor"),
+así que se investigó antes de aceptarlo, con la misma disciplina que las Sesiones 19-22.
+
+### Diagnóstico — ¿es sub-entrenamiento?
+
+Se reentrenó el modelo del silo Grande (B) con paciencia mucho mayor (40 en vez de 15, tope 300
+épocas) para comprobar si el early stopping original cortaba demasiado pronto. Resultado: el
+val_loss toca su mínimo hacia la época ~15-20 (mejor_val_loss idéntico, 0,0323) y **empieza a
+subir después** (0,033 en época 10 → 0,124 en época 30 → sigue subiendo) -- sobreajuste claro, no
+falta de entrenamiento. Dar más paciencia solo alarga el entrenamiento sin mejorar el mejor
+checkpoint. **Se descarta la hipótesis de sub-entrenamiento.**
+
+### Interpretación
+
+Es una manifestación real del problema de heterogeneidad no-IID (*non-independent and
+identically distributed*) que motiva la investigación en aprendizaje federado -- y que este
+propio proyecto ya había medido al elegir el eje de partición de silos (Sesión 4/15: JS=0,005 por
+región vs. heterogeneidad real por formato). Que el formato de tienda genere heterogeneidad
+suficiente para justificar 3 silos NO implica que las tiendas DENTRO de un silo sean homogéneas
+entre sí -- y evidentemente no lo son lo bastante para que un embedding de 8 dimensiones por
+tienda baste para que una única red comparta capacidad entre todas sin diluir patrones
+específicos de cada una. Este es exactamente el fenómeno documentado en el propio paper de FedAvg
+(McMahan et al., 2017) para clientes muy no-IID -- ahí es donde entra la personalización
+(condición E, T3.3): en vez de forzar que un solo modelo sirva a todas las tiendas por igual, se
+parte de un modelo global (federado) y se ajusta fino por tienda.
+
+**Hipótesis abierta (no verificada, anotar para la memoria):** una posible causa adicional es que
+LightGBM (Sesión 22) SÍ se benefició de agrupar `store_id` como feature categórica en un único
+modelo -- porque un árbol puede crear ramas de decisión completamente separadas por tienda, sin
+"mezclar" sus pesos. Un MLP, en cambio, aplica la MISMA transformación densa a la representación
+de todas las tiendas; la única forma de especializarse es a través del embedding de 8 dimensiones,
+una representación mucho más entrelazada y con menos margen para evitar interferencia entre
+tiendas distintas. Pendiente de explorar si esto se confirma al llegar al análisis cualitativo de
+embeddings (Sesión 15, proyección PCA).
+
+### Decisión
+
+Se acepta el resultado tal cual, documentado con honestidad: **no se fuerza ni se maquilla** para
+que encaje con la expectativa de "más datos, mejor modelo". Es, de hecho, un resultado más
+valioso para la tesis que el contrario -- si C (el techo) ya fuera claramente mejor que A sin
+necesitar ningún mecanismo especial, la pregunta de investigación central (RQ1: ¿el federado con
+personalización recupera la brecha sin compartir datos crudos?) perdería fuerza. Ahora la
+pregunta relevante para la Fase 3 es más matizada: ¿puede D (FedAvg) al menos igualar a C, y puede
+E (FedAvg + personalización) superar tanto a A como a C?
+
+### Resultados finales
+
+| Condición | Split | WMAPE media | WMAPE mediana | MASE mediana | RMSSE mediana | Cobertura |
+|---|---|---|---|---|---|---|
+| B — Centralizado por silo | val | 0,2640 | 0,1780 | 1,1733 | 0,9439 | 100,0% |
+| B — Centralizado por silo | test | 0,2697 | 0,1676 | 1,0423 | 0,8256 | 100,0% |
+| C — Centralizado global | val | 0,2993 | 0,1897 | 1,2900 | 1,0202 | 100,0% |
+| C — Centralizado global | test | 0,3047 | 0,1736 | 1,1317 | 0,8832 | 100,0% |
+
+### Salidas
+- `src/13_condicion_b_silo.py`, `src/14_condicion_c_global.py`.
+- `reports/resultados_condicion_B_silo.csv`, `reports/resultados_condicion_C_global.csv`.
+- Sin tests nuevos: ambos scripts son orquestación fina sobre `modelo_mlp.py` (ya cubierto por
+  `tests/test_modelo_mlp.py`, Sesión 23) -- añadir tests que solo repitan ese mismo módulo con
+  distinto agrupamiento de filas sería sobre-ingeniería sin verificar nada nuevo.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/13_condicion_b_silo.py
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/14_condicion_c_global.py
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

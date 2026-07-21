@@ -110,9 +110,19 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
   estacional/ETS, por detrás de media móvil y LightGBM global (esperado: cada modelo ve solo
   ~6.000 filas propias). Es el punto de partida "sin colaboración" que B-E deben mejorar. Ver
   Sesión 23.
-- **T2.4** Condición B (Centralizado por silo).
-- **T2.5** Condición C (Centralizado global). Referencia LightGBM en paralelo.
-- Integrar **Weights & Biases** desde aquí (trackear cada corrida y condición).
+- **T2.4-T2.5** ✅ **Cerradas (2026-07-21).** Condición B (`src/13_condicion_b_silo.py`, 3 modelos,
+  uno por silo) y C (`src/14_condicion_c_global.py`, 1 modelo global). **Resultado no trivial:**
+  WMAPE test mediana empeora monótonamente con más centralización — A=0,1476 < B=0,1676 <
+  C=0,1736 — a pesar de que C ve ~54× más datos que A. Verificado que no es sub-entrenamiento
+  (más paciencia solo produce sobreajuste, no mejora). Manifestación real de heterogeneidad
+  no-IID entre tiendas de un mismo silo — motiva directamente la personalización de la condición
+  E. Ver Sesión 24.
+- Integrar **Weights & Biases** desde aquí (trackear cada corrida y condición) — pendiente,
+  próxima tarea real antes de Fase 3.
+
+**→ Fase 2 (Baselines A/B/C + convencionales) completa: T2.1 a T2.5 cerradas.** W&B queda como
+único punto suelto antes de pasar a Fase 3 — no bloquea empezar D si se decide priorizar el
+resultado central del TFM.
 
 ### FASE 3 — Federado (D, E) — resultado central
 - **T3.1** Montar Flower (simulación): **cada silo = cliente** (3 participantes; cada silo centraliza internamente sus tiendas). Definir modelo (MLP+embeddings, Sesión 5), rondas, agregación ponderada por nº de filas.
