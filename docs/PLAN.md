@@ -128,11 +128,33 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
 resultado central del TFM.
 
 ### FASE 3 — Federado (D, E) — resultado central
-- **T3.1** Montar Flower (simulación): **cada silo = cliente** (3 participantes; cada silo centraliza internamente sus tiendas). Definir modelo (MLP+embeddings, Sesión 5), rondas, agregación ponderada por nº de filas.
-- **T3.2** Condición D: FedAvg entre los 3 silos. Comparar con FedProx (robusto a no-IID).
-- **T3.3** Condición E: personalización post-federado — fine-tuning de la última capa/embedding por tienda individual, estilo FedPer, sobre el modelo global ya convergido.
-- **T3.4** Manejo de stragglers y muestreo de clientes.
-- **T3.5** Comparación estadística A/B/C/D/E + métrica "brecha recuperada". Figuras a `reports/figures/`.
+- **T3.1** ✅ **Cerrada (2026-07-22).** Flower (`flwr[simulation]` 1.32.1, backend Ray) montado y
+  validado. `src/federado_flower.py`: los 3 silos = clientes, checkpointing manual por ronda
+  (evaluación centralizada sobre el val global), soporte FedAvg y FedProx. Bug de aliasing de
+  memoria encontrado y corregido en `get_params()` (`.numpy()` sobre CPU comparte memoria —
+  detectado por los tests, no afectó a la simulación real por la serialización entre procesos de
+  Ray). 5 tests nuevos. Ver Sesión 26.
+- **T3.2** ✅ **Cerrada (2026-07-22).** Condición D: FedAvg gana a FedProx (μ=0,01, sin tunear)
+  con este nº de rondas — WMAPE test mediana 0,1507 vs 0,1681. **D ya bate a B (0,168) y C
+  (0,174)** sin compartir ninguna fila cruda entre silos; queda ligeramente por detrás de A
+  (0,1476). Rompe de nuevo la asunción de la métrica de brecha recuperada (Centralizado no es el
+  techo). Ver Sesión 26.
+- **T3.3** ✅ **Cerrada (2026-07-22).** Condición E: fine-tuning por tienda desde los pesos de D
+  (FedAvg). **WMAPE test mediana 0,1396 — supera a A, B, C y D** en las tres métricas por
+  mediana; es la mejor de las 5 condiciones del proyecto, y la 3ª mejor de los 11 métodos
+  comparados hasta ahora (por detrás solo de LightGBM y media móvil, por márgenes pequeños). La
+  métrica de brecha recuperada da un % negativo mecánicamente (su premisa de que Centralizado es
+  el techo no se cumple aquí) — la lectura correcta es que E bate en absoluto tanto a A como a C,
+  más fuerte que "recuperar una brecha". Ver Sesión 27.
+
+**→ Fase 3 (T3.1-T3.3, el resultado central del TFM) completa.** T3.4 (stragglers) y el Wilcoxon
+formal completo de T3.5 quedan como extensión — no bloquean, las tablas comparativas ya
+disponibles (Sesiones 26-27) sostienen la respuesta a RQ1.
+- **T3.4** Manejo de stragglers y muestreo de clientes. *(extensión, no bloqueante)*
+- **T3.5** Comparación estadística A/B/C/D/E (Wilcoxon completo) + métrica "brecha recuperada"
+  (repensar su definición dado el hallazgo de la Sesión 26/27). Figuras a `reports/figures/`.
+  *(parcialmente cubierta por las tablas de las Sesiones 26-27; el test de Wilcoxon completo
+  requeriría recalcular métricas por serie para A/B/C, no guardadas en su momento.)*
 
 ### FASE 4 — MLOps de producción
 - **Config:** Hydra. **Tracking:** W&B. **Versionado datos:** DVC.

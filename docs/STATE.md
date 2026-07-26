@@ -1,14 +1,18 @@
 # STATE.md — Estado actual y próxima tarea
 
 > Documento vivo. **Actualízalo al completar cada tarea** (marca hecho, anota lo aprendido).
-> Última actualización: 2026-07-22 — **FASE 1 y FASE 2 completas** (T1.1-T1.5 + corrección Sesión 19;
-> T2.1-T2.5). Condiciones A/B/C entrenadas (MLP+embeddings, `src/modelo_mlp.py`): **hallazgo central
-> de la Sesión 24** — WMAPE test mediana empeora monótonamente con más centralización (A=0,148 <
-> B=0,168 < C=0,174), pese a que C ve ~54× más datos que A — heterogeneidad no-IID real entre
-> tiendas, verificado que no es sub-entrenamiento. Motiva directamente D (FedAvg) y sobre todo E
-> (FedAvg + personalización). **Weights & Biases integrado (Sesión 25)**, en modo offline (sin
-> cuenta configurada todavía). Próxima: **Fase 3** (T3.1-T3.5, federado con Flower — el resultado
-> central del TFM).
+> Última actualización: 2026-07-22 — **FASE 1, FASE 2 y FASE 3 (core) completas.** T1.1-T1.5 (+
+> corrección Sesión 19); T2.1-T2.5; T3.1-T3.3 (Flower, Condición D FedAvg/FedProx, Condición E
+> personalización). **Resultado central del TFM (RQ1): E (federado + personalización) — WMAPE
+> test mediana 0,1396 — supera a A (local), B y C (centralizado) y D (federado sin personalizar)**,
+> y es la 3ª mejor de los 11 métodos comparados en todo el proyecto (por detrás de LightGBM 0,132 y
+> media móvil 0,138, por márgenes pequeños). D por sí solo ya bate a B y C sin compartir datos
+> crudos. La métrica de "brecha recuperada" (T2.1) da un % negativo mecánicamente porque su premisa
+> (centralizado = techo) no se cumple en este dataset heterogéneo — la lectura correcta es que E
+> bate en absoluto tanto a local como a centralizado, más fuerte que "recuperar una brecha". Se
+> encontró y corrigió un bug de aliasing de memoria en `get_params()` (Sesión 26). Próxima:
+> extensiones opcionales (T3.4 stragglers, T3.5 Wilcoxon completo) o pasar directamente a Fase 4
+> (MLOps: Azure ML, dashboard) / Fase 4b (capítulos de negocio).
 
 ## ✅ Hecho
 
@@ -44,23 +48,25 @@
 - [x] **T2.3 cerrada (2026-07-21)**: `src/modelo_mlp.py` — MLP+embeddings en PyTorch (33→64→32→1, 4.985 parámetros, Huber+Adam, early stopping), arquitectura compartida por las condiciones A-E, reutilizable sin cambios. `src/12_condicion_a_local.py` — Condición A (Local): 54 modelos independientes, uno por tienda. WMAPE test mediana=0,1476 (por delante de persistencia/estacional/ETS, por detrás de media móvil y LightGBM global — esperado, cada modelo ve solo ~6.000 filas propias). A diferencia de la corrección del LightGBM (Sesión 22), aquí la escasez de datos por tienda NO se corrige: es justo lo que la condición "Local" debe representar. 7 tests nuevos (46/46 en total). Ver RESEARCH_LOG Sesión 23.
 - [x] **T2.4-T2.5 cerradas (2026-07-21)**: `src/13_condicion_b_silo.py` (Condición B, 3 modelos, uno por silo) y `src/14_condicion_c_global.py` (Condición C, 1 modelo global). **Hallazgo no trivial:** WMAPE test mediana empeora monótonamente con más centralización — A=0,1476 < B=0,1676 < C=0,1736 — pese a que C ve ~54× más datos de entrenamiento que cualquier modelo de A. Se verificó que NO es sub-entrenamiento (más paciencia en el silo Grande solo produce sobreajuste: val_loss mínimo idéntico, luego sube). Es heterogeneidad no-IID real entre tiendas de un mismo silo — motiva directamente la personalización de la condición E (T3.3). Ver RESEARCH_LOG Sesión 24.
 - [x] **Weights & Biases integrado (2026-07-22)**: `entrenar()` (`modelo_mlp.py`) acepta un `wandb_run` opcional (hook desacoplado, el módulo no importa `wandb`). `src/15_wandb_resumen_fase2.py` registra los 8 métodos de la Fase 2 ya cerrados (sin reentrenar nada) en modo **offline** — no hay cuenta de W&B configurada todavía en esta máquina. 4 tests nuevos (50/50 en total). Ver RESEARCH_LOG Sesión 25.
+- [x] **T3.1-T3.2 cerradas (2026-07-22)**: `src/federado_flower.py` — Flower (`flwr[simulation]` 1.32.1, backend Ray) montado; los 3 silos son los clientes, checkpointing manual por ronda (evaluación centralizada), soporte FedAvg y FedProx. **Bug encontrado y corregido:** `get_params()` compartía memoria con los pesos en vivo del modelo (`.numpy()` sobre CPU es zero-copy) — detectado por los tests, no afectó a la simulación real (la serialización entre procesos de Ray rompe el alias como efecto secundario). Condición D: FedAvg gana a FedProx (μ=0,01 sin tunear) — WMAPE test mediana 0,1507 vs 0,1681. **D ya bate a B (0,168) y C (0,174)** sin compartir datos crudos. 5 tests nuevos. Ver RESEARCH_LOG Sesión 26.
+- [x] **T3.3 cerrada (2026-07-22)**: `src/17_condicion_e_personalizacion.py` — fine-tuning por tienda desde los pesos de D (FedAvg). **WMAPE test mediana 0,1396 — supera a A, B, C y D**, la mejor de las 5 condiciones del proyecto y 3ª mejor de los 11 métodos comparados (solo por detrás de LightGBM 0,132 y media móvil 0,138). La métrica de brecha recuperada da un % negativo mecánicamente (su premisa de que Centralizado es el techo no se cumple aquí) — la lectura correcta es que E bate en absoluto a local y a centralizado. `entrenar()` ganó el parámetro `modelo_inicial` para continuar desde pesos dados. 1 test nuevo (56/56 en total). Ver RESEARCH_LOG Sesión 27. **Fase 3 (core) completa.**
 
-## ▶️ PRÓXIMA TAREA — Fase 3 (federado, el resultado central del TFM)
+## ▶️ PRÓXIMA TAREA — extensiones opcionales, o Fase 4 (MLOps)
 
-**Fase 1 y Fase 2 completas (T1.1-T1.5 + corrección Sesión 19; T2.1-T2.5). W&B integrado.**
-- `data/processed/stores_silos.csv` — silos Propuesta 2.
-- `data/processed/dataset_features.parquet` — **el dataset final**: 322.245 filas (Sesión 19).
-  **Ojo: `val` tiene 53 tiendas (no 54) — falta la tienda 52, ver `RESEARCH_LOG.md` Sesión 16.**
-- `reports/resultados_baselines.csv`, `reports/resultados_baselines_convencionales.csv`,
-  `reports/resultados_condicion_A_local.csv`, `reports/resultados_condicion_B_silo.csv`,
-  `reports/resultados_condicion_C_global.csv` — todos los resultados de Fase 2 hasta ahora.
-- `src/modelo_mlp.py` — arquitectura MLP+embeddings (PyTorch), lista para reutilizar en D/E sin
-  modificarla — solo cambia el bucle de entrenamiento (rondas de FedAvg en vez de un único fit).
-  Ya acepta `wandb_run` para trackear el entrenamiento.
+**Fases 1, 2 y 3 (core, T3.1-T3.3) completas.**
+- `reports/resultados_condicion_D_federado.csv`, `reports/resultados_condicion_E_personalizacion.csv`
+  — resultados del federado. `reports/historial_rondas_condicion_D.csv` — convergencia por ronda.
+- `data/processed/checkpoints_federado/{fedavg,fedprox}/` — pesos de cada ronda (gitignored,
+  reproducibles con `src/16_condicion_d_federado.py`).
+- `src/federado_flower.py`, `src/modelo_mlp.py` (ahora con `modelo_inicial`) — infraestructura
+  lista para T3.4 (stragglers) si se retoma.
 
-**Fase 3 (T3.1-T3.5):** montar Flower, Condición D (FedAvg entre los 3 silos, comparar con
-FedProx por la heterogeneidad ya confirmada en la Sesión 24) y Condición E (FedAvg +
-personalización por tienda) — el resultado central del TFM (RQ1).
+**Opciones para continuar (ninguna bloquea la otra):**
+1. **T3.4** (muestreo de clientes/stragglers) y **T3.5** (Wilcoxon formal completo A-E) — extensiones,
+   no esenciales: las tablas comparativas ya disponibles sostienen la respuesta a RQ1.
+2. **Fase 4** (MLOps): Azure ML (registro de modelos), dashboard Streamlit, CI/CD, Docker.
+3. **Fase 4b** (capítulos de negocio, RQ3/RQ4): FL vs. data clean rooms, cuantificación de valor
+   en €. Es solo análisis/escritura, no requiere entrenar nada más.
 
 ## ⏳ Pendiente de decisión / acción del usuario
 

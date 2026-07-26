@@ -84,6 +84,7 @@ def entrenar(
     semilla: int = 42,
     verbose: bool = False,
     wandb_run: Optional[object] = None,
+    modelo_inicial: Optional[MLPConEmbeddings] = None,
 ) -> tuple[MLPConEmbeddings, dict]:
     """Entrena un MLPConEmbeddings (Huber loss, Adam) con early stopping sobre val_loss.
     Devuelve el modelo con los MEJORES pesos vistos (no los últimos, que pueden estar ya
@@ -92,9 +93,17 @@ def entrenar(
     `wandb_run` es opcional y genérico (cualquier objeto con `.log(dict)`, típicamente el valor
     de retorno de `wandb.init()`) -- este módulo no importa `wandb` directamente para no
     forzarlo como dependencia dura de la arquitectura; quien llama a `entrenar()` decide si
-    trackea la corrida o no."""
+    trackea la corrida o no.
+
+    `modelo_inicial` es opcional -- si se pasa, el entrenamiento CONTINÚA desde esos pesos en vez
+    de partir de una inicialización aleatoria (uso: personalización post-federado, condición E,
+    T3.3 -- fine-tuning por tienda a partir del modelo global ya convergido)."""
     torch.manual_seed(semilla)
-    modelo = MLPConEmbeddings()
+    if modelo_inicial is not None:
+        modelo = MLPConEmbeddings()
+        modelo.load_state_dict(modelo_inicial.state_dict())
+    else:
+        modelo = MLPConEmbeddings()
     opt = torch.optim.Adam(modelo.parameters(), lr=lr)
     perdida_fn = nn.HuberLoss()
 

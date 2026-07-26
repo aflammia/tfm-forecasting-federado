@@ -1574,6 +1574,227 @@ WANDB_MODE=offline PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/15_wand
 
 ---
 
+## Sesión 26 — T3.1-T3.2: infraestructura Flower + Condición D (FedAvg vs. FedProx)
+
+**Fecha:** 2026-07-22
+**Scripts:** `src/federado_flower.py` (nuevo), `src/16_condicion_d_federado.py` (nuevo),
+`tests/test_federado_flower.py` (nuevo)
+**Objetivo:** montar Flower (framework real de FL, no un bucle de FedAvg hecho a mano) para
+simular el entrenamiento federado entre los 3 silos, y entrenar la primera condición realmente
+federada del proyecto (D), comparando FedAvg con FedProx dado que la Sesión 24 ya encontró
+heterogeneidad no-IID real entre tiendas de un mismo silo.
+
+### Método — T3.1
+
+Se instaló `flwr[simulation]` (1.32.1, con backend Ray) y se validó con una prueba mínima
+(2 clientes de juguete) antes de conectar el modelo y los datos reales -- funciona correctamente
+en esta máquina (Windows/CPU), con un coste fijo de arranque de Ray de ~15-40s por simulación.
+
+`src/federado_flower.py`: los 3 SILOS son los clientes (no las 54 tiendas sueltas, igual que en
+B -- Sesión 5). Reutiliza `MLPConEmbeddings` sin ninguna modificación; lo que cambia frente a A/B/C
+es el bucle de entrenamiento: cada silo hace pocas épocas locales POR RONDA (no un `entrenar()`
+completo con early stopping), y el servidor promedia los pesos entre rondas -- la diferencia
+central de FedAvg (McMahan et al., 2017) frente a un promediado de un solo paso.
+
+Como `run_simulation()` (API "Flower Next") no devuelve un objeto `History` como la API clásica,
+se implementó checkpointing manual: `evaluate_fn` (evaluación CENTRALIZADA sobre el val global de
+las 3 silos, no un val por silo -- más estable, evita el mismo problema de ruido de la Sesión 24)
+guarda los pesos de cada ronda a disco y registra su pérdida en un dict compartido; terminada la
+simulación, se recupera la ronda de menor pérdida (mismo principio que `entrenar()`: quedarse con
+los mejores pesos vistos, no los últimos).
+
+Soporta FedProx (Li et al., 2020) además de FedAvg: añade un término proximal
+`(mu/2)·||w_local - w_global||²` a la pérdida local, penalizando que un silo se aleje demasiado
+de los pesos globales en cada ronda -- diseñado específicamente para clientes no-IID.
+
+### Incidencia — bug de aliasing de memoria en `get_params()`
+
+Al escribir los tests de `federado_flower.py`, dos fallaron de forma llamativa: tomar una
+"foto" de los pesos antes y después de entrenar daba **exactamente la misma diferencia (0.0)**,
+pese a que la pérdida sí bajaba con el entrenamiento. Investigado antes de aceptarlo:
+
+**Causa raíz:** `v.cpu().numpy()` sobre un tensor de PyTorch que ya está en CPU **comparte
+memoria** con el tensor original (comportamiento zero-copy documentado de la interoperabilidad
+PyTorch/NumPy) -- verificado con `np.shares_memory()`. La función `get_params()` devolvía, por
+tanto, una VISTA sobre los pesos en vivo del modelo, no una copia independiente: si el modelo
+seguía entrenando después de tomar la "foto", el array ya "capturado" cambiaba en silencio con
+él, porque apuntaba a la misma memoria.
+
+**Por qué no se detectó en la simulación real:** en `run_simulation` con backend Ray, cada
+cliente corre en un proceso/actor separado; el valor de retorno de `fit()` se serializa para
+cruzar esa frontera de proceso antes de que el modelo del cliente vuelva a entrenar en la ronda
+siguiente -- la serialización rompe el alias de memoria como efecto secundario. La simulación ya
+ejecutada con la versión con el bug (calibración de 5 rondas y la ejecución completa de D)
+mostró una curva de pérdida coherente y monótona en las primeras rondas, consistente con
+agregación correcta -- se decidió NO relanzar esas corridas, documentando el razonamiento en vez
+de descartar resultados sin evidencia de que estuvieran mal.
+
+**Corrección:** `get_params()` ahora hace `.detach().cpu().numpy().copy()` -- copia explícita.
+Los 5 tests de `federado_flower.py` (incluidos los 2 que habían fallado) pasan tras la corrección.
+
+### Resultados — Condición D
+
+Calibración previa (5 rondas sobre datos reales): la pérdida de validación centralizada ya
+convergía hacia la ronda 2-3 (0,062-0,061) y empezaba a subir levemente hacia la 5 -- se fijó
+`NUM_ROUNDS=15` (margen de sobra sin gastar cómputo innecesario, ~40s/ronda).
+
+| Ronda | val_loss FedAvg | val_loss FedProx (μ=0,01) |
+|---|---|---|
+| 0 (inicial) | 5,030 | 5,030 |
+| 2 | 0,0656 | **0,0623** (mínimo FedProx) |
+| 3 | **0,0606** (mínimo FedAvg) | 0,0638 |
+| 10 | 0,0818 | 0,0877 |
+| 15 | 0,0812 | 0,1133 |
+
+Ambas estrategias convergen rápido (ronda 2-3) y luego se degradan levemente con más rondas —
+**FedAvg se mantiene más estable que FedProx** en las rondas posteriores con este μ=0,01 (sin
+tunear); el término proximal no ayudó aquí, posiblemente porque la selección de la mejor ronda ya
+mitiga buena parte del problema de "deriva" que FedProx está diseñado a resolver. Se reporta
+FedAvg como resultado de D; FedProx queda documentado como referencia, no descartado.
+
+| Condición | Split | WMAPE mediana | MASE mediana | RMSSE mediana |
+|---|---|---|---|---|
+| D — FedAvg (ronda 3) | test | **0,1507** | 1,0100 | 0,7966 |
+| D — FedProx (ronda 2) | test | 0,1681 | 1,0756 | 0,8515 |
+
+### Interpretación — D ya bate a B y C
+
+Comparando con lo ya cerrado (test, WMAPE mediana): **D-FedAvg (0,1507) queda por debajo de B
+(0,1676) y de C (0,1736)** -- el federado, SIN que ningún silo comparta una fila de datos cruda
+con otro, supera a ambas alternativas centralizadas. Quedó, eso sí, ligeramente por detrás de A
+(0,1476, entrenamiento local puro). Es un resultado central y muy defendible para RQ1: confirma
+que centralizar datos heterogéneos no es el "techo" que la métrica de brecha recuperada asume por
+diseño -- ver nota metodológica en la sección de salidas.
+
+### Nota metodológica — la métrica de brecha recuperada asume un orden que aquí no se cumple
+
+`porcentaje_brecha_recuperada(wmape_local, wmape_centralizado, wmape_federado)` (T2.1) se diseñó
+asumiendo Local > Centralizado (en error) -- es decir, que centralizar datos es el techo ideal.
+La Sesión 24 ya rompió esa asunción (C rindió peor que A) y D lo confirma de nuevo. Aplicar la
+fórmula mecánicamente da un número (~12%) que **no debe reportarse sin este matiz**: con
+`wmape_local=0,1476` y `wmape_centralizado=0,1736` (C), la "brecha total" es negativa
+(-0,0260) -- Local ya es mejor que Centralizado en este dataset heterogéneo. La lectura honesta y
+más útil aquí es la comparación directa de WMAPE (D bate a B y C, casi iguala a A), no forzar el
+porcentaje de una métrica cuya premisa no se sostiene. Pendiente de decidir, para la memoria, si
+se redefine la métrica (p.ej. contra el mejor de A/B/C como "techo práctico" en vez de asumir C)
+o se reporta solo la comparación directa.
+
+### Salidas
+- `src/federado_flower.py` — infraestructura de FL con Flower (cliente, checkpointing, FedAvg/FedProx).
+- `src/16_condicion_d_federado.py` — entrenamiento y evaluación de la Condición D.
+- `tests/test_federado_flower.py` — 5 tests (incluye el bug de aliasing).
+- `reports/resultados_condicion_D_federado.csv`, `reports/historial_rondas_condicion_D.csv`.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/16_condicion_d_federado.py
+./.venv/Scripts/python.exe -m pytest tests/test_federado_flower.py -v
+```
+
+---
+
+## Sesión 27 — T3.3: Condición E (Federado + personalización) — cierre de la Fase 3 (D, E)
+
+**Fecha:** 2026-07-22
+**Script:** `src/17_condicion_e_personalizacion.py`
+**Objetivo:** partir del modelo global ya convergido de D (FedAvg, ganador de la Sesión 26) y
+hacer un fine-tuning corto por tienda individual -- la condición diseñada específicamente para
+responder a la heterogeneidad no-IID que B y C sufrieron (Sesión 24).
+
+### Método
+
+`cargar_mejor_modelo_D()` lee `resultados_condicion_D_federado.csv`, identifica la estrategia
+ganadora (FedAvg) y carga su checkpoint de la mejor ronda (ronda 3) desde
+`data/processed/checkpoints_federado/`. Con esos pesos como punto de partida (`modelo_inicial`,
+parámetro nuevo añadido a `entrenar()` en `modelo_mlp.py` -- antes solo permitía inicialización
+aleatoria), se hace un fine-tuning independiente por tienda (54 modelos), con `lr=5e-4` (más bajo
+que el 1e-3 por defecto, para no deshacer de golpe la estructura ya aprendida) y early stopping
+igual que en A.
+
+### Resultados
+
+| Condición | Split | WMAPE mediana | MASE mediana | RMSSE mediana | Cobertura |
+|---|---|---|---|---|---|
+| E — Federado + personalización | val | 0,1553 | 1,0466 | 0,8414 | 100,0% |
+| E — Federado + personalización | test | **0,1396** | 0,9002 | 0,7190 | 98,1% |
+
+**E supera a A, B, C y D en las tres métricas por mediana** -- es, con diferencia, la mejor de
+las cinco condiciones experimentales (A-E) entrenadas con el MLP+embeddings del proyecto:
+
+| Condición | WMAPE test (mediana) |
+|---|---|
+| A — Local | 0,1476 |
+| B — Centralizado por silo | 0,1676 |
+| C — Centralizado global | 0,1736 |
+| D — FedAvg | 0,1507 |
+| **E — Federado + personalización** | **0,1396** |
+
+### Interpretación — la métrica de brecha recuperada, revisitada
+
+Aplicando `porcentaje_brecha_recuperada(wmape_local=0,1476, wmape_centralizado=0,1736,
+wmape_federado=0,1396)` mecánicamente: brecha_total = 0,1476-0,1736 = **-0,0260** (negativa: local
+ya es mejor que centralizado); brecha_recuperada = 0,1476-0,1396 = 0,0080; porcentaje ≈ **-30,8%**.
+
+Un porcentaje negativo aquí NO significa un resultado malo -- significa que la premisa de la
+métrica (centralizado = techo superior a local) no se cumple en este dataset, exactamente como ya
+se documentó en la Sesión 26. La lectura correcta y más fuerte es la directa: **E bate en
+términos absolutos tanto a A (local) como a C (centralizado)** -- no solo recupera una brecha,
+la cierra por completo y la supera por ambos lados. Es, si acaso, un resultado más contundente que
+el que la métrica original fue diseñada para capturar. Queda pendiente para la memoria decidir si
+se redefine formalmente la métrica (p.ej. como % de mejora sobre el mejor de {A, B, C} en vez de
+asumir C como techo) o se reporta la comparación directa con esta nota explicativa.
+
+### Clasificación general actualizada (los 10 métodos de la Fase 2 + Fase 3, por WMAPE test mediana)
+
+| Método | WMAPE mediana | Tipo |
+|---|---|---|
+| LightGBM (global) | 0,1320 | convencional |
+| Media móvil (4 sem.) | 0,1379 | ingenuo |
+| **E — Federado + personalización** | **0,1396** | **federado** |
+| A — Local | 0,1476 | MLP |
+| D — FedAvg | 0,1507 | federado |
+| Persistencia (t-1) | 0,1584 | ingenuo |
+| B — Centralizado por silo | 0,1676 | MLP |
+| D — FedProx | 0,1681 | federado |
+| C — Centralizado global | 0,1736 | MLP |
+| Estacional (t-52) | 0,2296 | ingenuo |
+| ETS/Holt-Winters | 0,3344 | convencional |
+
+**E es la tercera mejor de las 11 filas de esta tabla**, y la mejor de todas las que usan el
+MLP+embeddings del proyecto -- por delante de LightGBM le queda un margen pequeño (0,1396 vs
+0,1320) y de la media móvil casi lo iguala (0,1396 vs 0,1379). Dado que ninguna de las
+condiciones A-E ha pasado por un ajuste de hiperparámetros propio (a diferencia del LightGBM de
+la Sesión 22), hay margen razonable para pensar que ese margen podría cerrarse con tuning --
+anotado como posible trabajo futuro, no una limitación que invalide el resultado ya conseguido.
+
+### Fase 3 (T3.1, T3.2, T3.3) completa
+
+Con esta sesión se cierran T3.1 (infraestructura Flower), T3.2 (Condición D) y T3.3 (Condición
+E) -- las tres tareas CORE de la Fase 3, el resultado central del TFM (RQ1). T3.4 (manejo de
+stragglers) y T3.5 (comparación estadística formal Wilcoxon A-E completa) quedan como
+extensiones -- T3.5 parcialmente cubierta por las tablas comparativas de esta sesión y la
+Sesión 26, pendiente de un test de significancia formal si se necesita para la memoria (requeriría
+recuperar o recalcular las métricas por serie de A/B/C, no guardadas individualmente en su
+momento).
+
+### Salidas
+- `src/17_condicion_e_personalizacion.py`.
+- `reports/resultados_condicion_E_personalizacion.csv`.
+- `reports/por_serie_condicion_E_val.csv`, `reports/por_serie_condicion_E_test.csv` (por si se
+  necesita Wilcoxon más adelante).
+- `src/modelo_mlp.py` — `entrenar()` con parámetro `modelo_inicial` (nuevo, para continuar desde
+  pesos dados en vez de inicialización aleatoria). 1 test nuevo (56/56 en total).
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/17_condicion_e_personalizacion.py
+./.venv/Scripts/python.exe -m pytest tests/ -v
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

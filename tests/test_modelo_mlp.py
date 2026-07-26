@@ -97,6 +97,24 @@ def test_predecir_nunca_devuelve_ventas_negativas():
     assert len(pred) == len(val_df)
 
 
+# ============================================================ continuar desde pesos dados (E, T3.3)
+
+def test_entrenar_con_modelo_inicial_parte_de_esos_pesos_no_de_aleatorio():
+    """Sesión 26 (Condición E): entrenar() debe poder CONTINUAR desde un modelo ya entrenado
+    (p.ej. el global convergido de FedAvg/D) en vez de siempre reinicializar al azar. Con
+    epochs=0 no hay ninguna actualización de gradiente -> el modelo devuelto debe ser
+    EXACTAMENTE el modelo_inicial, no una inicialización aleatoria nueva."""
+    train_df = _df_sintetico(50, semilla=20)
+    val_df = _df_sintetico(20, semilla=21)
+    modelo_previo, _ = entrenar(train_df, val_df, epochs=5, paciencia=5, semilla=1)
+
+    modelo_continuado, hist = entrenar(train_df, val_df, epochs=0, paciencia=1, semilla=99,
+                                        modelo_inicial=modelo_previo)
+
+    for p1, p2 in zip(modelo_previo.parameters(), modelo_continuado.parameters()):
+        assert torch.allclose(p1, p2)
+
+
 # ============================================================ hook de tracking (W&B, Fase 3)
 
 class _FalsoWandbRun:
