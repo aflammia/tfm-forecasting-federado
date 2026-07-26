@@ -31,6 +31,16 @@ https://arxiv.org/abs/2503.12220
 > ningún estudio que use cadenas competidoras reales como silos, porque ese dato no es público.
 > Citado por primera vez: Sesión 15 (estado del arte de la partición en silos).
 
+**Li, T., Sahu, A. K., Zaheer, M., Sanjabi, M., Talwalkar, A., & Smith, V. (2020).** Federated
+optimization in heterogeneous networks. *Proceedings of Machine Learning and Systems*, 2, 429–450.
+https://arxiv.org/abs/1812.06127
+
+> Paper original de FedProx — añade un término proximal (μ/2·‖w_local − w_global‖²) a la pérdida
+> local, diseñado específicamente para clientes no-IID (systems + statistical heterogeneity).
+> Usado como estrategia alternativa a FedAvg en la Condición D, dado que la Sesión 24 ya había
+> encontrado heterogeneidad no-IID real entre tiendas de un mismo silo. Citado por primera vez:
+> Sesión 26 (Condición D — FedAvg vs. FedProx).
+
 ---
 
 ## Métodos de forecasting en retail (baselines convencionales, T2.2b)
