@@ -1,13 +1,14 @@
 # STATE.md — Estado actual y próxima tarea
 
 > Documento vivo. **Actualízalo al completar cada tarea** (marca hecho, anota lo aprendido).
-> Última actualización: 2026-07-21 — **FASE 1 y FASE 2 completas** (T1.1-T1.5 + corrección Sesión 19;
+> Última actualización: 2026-07-22 — **FASE 1 y FASE 2 completas** (T1.1-T1.5 + corrección Sesión 19;
 > T2.1-T2.5). Condiciones A/B/C entrenadas (MLP+embeddings, `src/modelo_mlp.py`): **hallazgo central
 > de la Sesión 24** — WMAPE test mediana empeora monótonamente con más centralización (A=0,148 <
 > B=0,168 < C=0,174), pese a que C ve ~54× más datos que A — heterogeneidad no-IID real entre
 > tiendas, verificado que no es sub-entrenamiento. Motiva directamente D (FedAvg) y sobre todo E
-> (FedAvg + personalización). Próxima: integrar **Weights & Biases**, luego **Fase 3** (T3.1-T3.5,
-> federado con Flower — el resultado central del TFM).
+> (FedAvg + personalización). **Weights & Biases integrado (Sesión 25)**, en modo offline (sin
+> cuenta configurada todavía). Próxima: **Fase 3** (T3.1-T3.5, federado con Flower — el resultado
+> central del TFM).
 
 ## ✅ Hecho
 
@@ -42,10 +43,11 @@
 - [x] **Corrección Sesión 22 (2026-07-21)**: el primer LightGBM (por tienda, 54 modelos, sin tuning) no superaba ni a la media móvil (T2.2). Tras tunear hiperparámetros (búsqueda aleatoria, 25 candidatos) y ampliar features (festivos, día de pago), seguía sin ganar — causa real: cada modelo por tienda entrenaba con ~5-6 mil filas y decidía early stopping sobre un val de solo ~264 filas, demasiado ruidoso. Sustituido por **un único LightGBM global** (`store_id`+`family_id` como categóricas, ~54x más datos por modelo) — bate a la media móvil y a ETS en WMAPE/MASE/RMSSE por mediana (WMAPE test 0,132 vs 0,138 y 0,334), cobertura 100%. `configs/lightgbm_hiperparametros.json` guardado para reproducibilidad. Ver RESEARCH_LOG Sesión 22.
 - [x] **T2.3 cerrada (2026-07-21)**: `src/modelo_mlp.py` — MLP+embeddings en PyTorch (33→64→32→1, 4.985 parámetros, Huber+Adam, early stopping), arquitectura compartida por las condiciones A-E, reutilizable sin cambios. `src/12_condicion_a_local.py` — Condición A (Local): 54 modelos independientes, uno por tienda. WMAPE test mediana=0,1476 (por delante de persistencia/estacional/ETS, por detrás de media móvil y LightGBM global — esperado, cada modelo ve solo ~6.000 filas propias). A diferencia de la corrección del LightGBM (Sesión 22), aquí la escasez de datos por tienda NO se corrige: es justo lo que la condición "Local" debe representar. 7 tests nuevos (46/46 en total). Ver RESEARCH_LOG Sesión 23.
 - [x] **T2.4-T2.5 cerradas (2026-07-21)**: `src/13_condicion_b_silo.py` (Condición B, 3 modelos, uno por silo) y `src/14_condicion_c_global.py` (Condición C, 1 modelo global). **Hallazgo no trivial:** WMAPE test mediana empeora monótonamente con más centralización — A=0,1476 < B=0,1676 < C=0,1736 — pese a que C ve ~54× más datos de entrenamiento que cualquier modelo de A. Se verificó que NO es sub-entrenamiento (más paciencia en el silo Grande solo produce sobreajuste: val_loss mínimo idéntico, luego sube). Es heterogeneidad no-IID real entre tiendas de un mismo silo — motiva directamente la personalización de la condición E (T3.3). Ver RESEARCH_LOG Sesión 24.
+- [x] **Weights & Biases integrado (2026-07-22)**: `entrenar()` (`modelo_mlp.py`) acepta un `wandb_run` opcional (hook desacoplado, el módulo no importa `wandb`). `src/15_wandb_resumen_fase2.py` registra los 8 métodos de la Fase 2 ya cerrados (sin reentrenar nada) en modo **offline** — no hay cuenta de W&B configurada todavía en esta máquina. 4 tests nuevos (50/50 en total). Ver RESEARCH_LOG Sesión 25.
 
-## ▶️ PRÓXIMA TAREA — Integrar Weights & Biases, luego Fase 3 (federado)
+## ▶️ PRÓXIMA TAREA — Fase 3 (federado, el resultado central del TFM)
 
-**Fase 1 y Fase 2 completas (T1.1-T1.5 + corrección Sesión 19; T2.1-T2.5).**
+**Fase 1 y Fase 2 completas (T1.1-T1.5 + corrección Sesión 19; T2.1-T2.5). W&B integrado.**
 - `data/processed/stores_silos.csv` — silos Propuesta 2.
 - `data/processed/dataset_features.parquet` — **el dataset final**: 322.245 filas (Sesión 19).
   **Ojo: `val` tiene 53 tiendas (no 54) — falta la tienda 52, ver `RESEARCH_LOG.md` Sesión 16.**
@@ -54,9 +56,7 @@
   `reports/resultados_condicion_C_global.csv` — todos los resultados de Fase 2 hasta ahora.
 - `src/modelo_mlp.py` — arquitectura MLP+embeddings (PyTorch), lista para reutilizar en D/E sin
   modificarla — solo cambia el bucle de entrenamiento (rondas de FedAvg en vez de un único fit).
-
-**Weights & Biases:** integrar tracking antes de entrar en Fase 3 (federado, Flower) — más
-importante a partir de ahí, donde hay muchas más corridas que comparar (rondas × condiciones).
+  Ya acepta `wandb_run` para trackear el entrenamiento.
 
 **Fase 3 (T3.1-T3.5):** montar Flower, Condición D (FedAvg entre los 3 silos, comparar con
 FedProx por la heterogeneidad ya confirmada en la Sesión 24) y Condición E (FedAvg +
@@ -66,6 +66,9 @@ personalización por tienda) — el resultado central del TFM (RQ1).
 
 - **Regenerar el token de Kaggle** (se pegó en un chat; higiene). Al hacerlo, actualizar `C:\Users\alefl\.kaggle\access_token`.
 - **Cuenta de Azure for Students** (verificar con correo UNAV) — necesaria para la Fase 4 (Azure ML). No bloquea las Fases 1-3.
+- **Cuenta de Weights & Biases** (gratuita, [wandb.ai](https://wandb.ai)) — al crearla, ejecutar
+  `wandb login` y luego `wandb sync wandb/<carpeta>` para subir la corrida ya registrada en local.
+  No bloquea la Fase 3 (funciona en modo offline mientras tanto).
 
 ## 🧭 Cómo ejecutar (recordatorio)
 

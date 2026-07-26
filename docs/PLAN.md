@@ -117,8 +117,11 @@ Matriz de condiciones a comparar (misma tarea, mismos datos, misma validación):
   (más paciencia solo produce sobreajuste, no mejora). Manifestación real de heterogeneidad
   no-IID entre tiendas de un mismo silo — motiva directamente la personalización de la condición
   E. Ver Sesión 24.
-- Integrar **Weights & Biases** desde aquí (trackear cada corrida y condición) — pendiente,
-  próxima tarea real antes de Fase 3.
+- **Weights & Biases** ✅ **Integrado (2026-07-22).** `entrenar()` (`modelo_mlp.py`) acepta un
+  `wandb_run` opcional (hook, sin importar `wandb` directamente en el módulo). Corrida de
+  referencia (`src/15_wandb_resumen_fase2.py`) registra los 8 métodos de la Fase 2 ya cerrados en
+  modo offline (sin cuenta configurada todavía — pendiente de acción del usuario, no bloquea). Ver
+  Sesión 25.
 
 **→ Fase 2 (Baselines A/B/C + convencionales) completa: T2.1 a T2.5 cerradas.** W&B queda como
 único punto suelto antes de pasar a Fase 3 — no bloquea empezar D si se decide priorizar el

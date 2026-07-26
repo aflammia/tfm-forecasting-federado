@@ -95,3 +95,32 @@ def test_predecir_nunca_devuelve_ventas_negativas():
     pred = predecir(modelo, val_df)
     assert (pred >= 0).all()
     assert len(pred) == len(val_df)
+
+
+# ============================================================ hook de tracking (W&B, Fase 3)
+
+class _FalsoWandbRun:
+    """Doble de prueba de un wandb.Run -- no depende de tener wandb instalado ni de red."""
+
+    def __init__(self):
+        self.llamadas = []
+
+    def log(self, datos: dict):
+        self.llamadas.append(datos)
+
+
+def test_entrenar_llama_a_wandb_run_log_por_cada_epoca():
+    train_df = _df_sintetico(150, semilla=8)
+    val_df = _df_sintetico(40, semilla=9)
+    falso_run = _FalsoWandbRun()
+    modelo, hist = entrenar(train_df, val_df, epochs=8, paciencia=8, semilla=42, wandb_run=falso_run)
+    assert len(falso_run.llamadas) == hist["epocas_entrenadas"]
+    assert all({"train_loss", "val_loss", "epoca"} <= set(l.keys()) for l in falso_run.llamadas)
+
+
+def test_entrenar_sin_wandb_run_no_falla():
+    """wandb_run=None (por defecto) no debe intentar llamar a nada."""
+    train_df = _df_sintetico(100, semilla=10)
+    val_df = _df_sintetico(30, semilla=11)
+    modelo, hist = entrenar(train_df, val_df, epochs=5, paciencia=5, semilla=42)
+    assert hist["epocas_entrenadas"] > 0

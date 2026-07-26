@@ -1517,6 +1517,63 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/14_condicion_c_global.py
 
 ---
 
+## Sesión 25 — Integración de Weights & Biases (previa a la Fase 3)
+
+**Fecha:** 2026-07-22
+**Scripts:** `src/modelo_mlp.py` (modificado) + `src/15_wandb_resumen_fase2.py` (nuevo)
+**Objetivo:** integrar tracking de experimentos antes de entrar en la Fase 3 (federado), donde el
+número de corridas a comparar crece mucho (rondas × condiciones D/E) y hace falta un dashboard,
+no solo CSVs sueltos.
+
+### Método
+
+1. `wandb` instalado y añadido a `requirements.txt`.
+2. `entrenar()` (en `modelo_mlp.py`) acepta ahora un parámetro opcional `wandb_run` (por defecto
+   `None`) — cualquier objeto con `.log(dict)`, típicamente el valor de `wandb.init()`. El módulo
+   **no importa `wandb` directamente**: quien llama a `entrenar()` decide si trackea la corrida,
+   manteniendo `modelo_mlp.py` desacoplado de esa dependencia (relevante para los tests, que usan
+   un doble de prueba en vez de una cuenta real de W&B).
+3. `src/15_wandb_resumen_fase2.py`: no reentrena nada — carga los 5 CSV de resultados ya cerrados
+   (T2.2, T2.2b, T2.3, T2.4, T2.5), los une bajo una columna `metodo` común, y registra en W&B una
+   tabla comparable + un gráfico de barras (WMAPE mediana en test) como línea base visual antes de
+   que empiece la Fase 3.
+4. **Modo por defecto: offline.** No hay cuenta de W&B configurada en esta máquina todavía —
+   `WANDB_MODE=offline` guarda la corrida en `wandb/` (ya estaba en `.gitignore`) sin necesitar
+   login ni red. Se verificó que sincroniza limpiamente con una prueba mínima antes de integrarlo.
+
+### Resultados
+
+Corrida offline ejecutada correctamente; el ranking registrado coincide exactamente con el ya
+reportado en el informe de Fase 2 (verificación cruzada, no solo "no dio error"):
+LightGBM global (0,1320) < Media móvil (0,1379) < A-Local (0,1476) < Persistencia (0,1584) <
+B-Silo (0,1676) < C-Global (0,1736) < Estacional (0,2296) < ETS (0,3344).
+
+**4 tests nuevos** (2 en `test_modelo_mlp.py` con un doble de prueba de `wandb.Run`, 2 en
+`test_wandb_resumen_fase2.py` para la unión de CSVs). **50 de 50 tests en total.**
+
+### Pendiente de acción del usuario (no bloquea)
+
+Crear una cuenta gratuita en [wandb.ai](https://wandb.ai) y ejecutar `wandb login` cuando
+convenga; en ese momento, `wandb sync wandb/<carpeta-de-la-corrida>` sube lo ya registrado en
+local sin tener que re-ejecutar nada. A partir de la Fase 3, si ya hay cuenta, basta con
+`WANDB_MODE=online` (o quitar la variable, que es el valor por defecto de la librería una vez
+autenticada).
+
+### Salidas
+- `requirements.txt` — `wandb>=0.28` añadido.
+- `src/modelo_mlp.py` — `entrenar()` con hook opcional de tracking.
+- `src/15_wandb_resumen_fase2.py` — corrida de referencia de la Fase 2 completa.
+- `tests/test_wandb_resumen_fase2.py` — 2 tests.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+WANDB_MODE=offline PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/15_wandb_resumen_fase2.py
+./.venv/Scripts/python.exe -m pytest tests/ -v
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

@@ -16,6 +16,9 @@ lightgbm>=4.0
 statsmodels>=0.14
 # Flower (federated learning real, Fase 3) se añadirá cuando toque T3.1
 
+# Tracking de experimentos (T2.4b/Fase 3)
+wandb>=0.28
+
 # Notebooks (generación y ejecución programática)
 nbformat>=5.9
 nbclient>=0.9

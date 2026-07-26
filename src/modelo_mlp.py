@@ -83,10 +83,16 @@ def entrenar(
     batch_size: int = 256,
     semilla: int = 42,
     verbose: bool = False,
+    wandb_run: Optional[object] = None,
 ) -> tuple[MLPConEmbeddings, dict]:
     """Entrena un MLPConEmbeddings (Huber loss, Adam) con early stopping sobre val_loss.
     Devuelve el modelo con los MEJORES pesos vistos (no los últimos, que pueden estar ya
-    sobreajustando) y un historial de pérdidas por época."""
+    sobreajustando) y un historial de pérdidas por época.
+
+    `wandb_run` es opcional y genérico (cualquier objeto con `.log(dict)`, típicamente el valor
+    de retorno de `wandb.init()`) -- este módulo no importa `wandb` directamente para no
+    forzarlo como dependencia dura de la arquitectura; quien llama a `entrenar()` decide si
+    trackea la corrida o no."""
     torch.manual_seed(semilla)
     modelo = MLPConEmbeddings()
     opt = torch.optim.Adam(modelo.parameters(), lr=lr)
@@ -121,6 +127,8 @@ def entrenar(
 
         historial["train_loss"].append(perdida_epoca)
         historial["val_loss"].append(val_perdida)
+        if wandb_run is not None:
+            wandb_run.log({"train_loss": perdida_epoca, "val_loss": val_perdida, "epoca": epoca})
 
         if val_perdida < mejor_val - 1e-5:
             mejor_val = val_perdida
