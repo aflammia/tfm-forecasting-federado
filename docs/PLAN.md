@@ -150,6 +150,16 @@ resultado central del TFM.
 **→ Fase 3 (T3.1-T3.3, el resultado central del TFM) completa.** T3.4 (stragglers) y el Wilcoxon
 formal completo de T3.5 quedan como extensión — no bloquean, las tablas comparativas ya
 disponibles (Sesiones 26-27) sostienen la respuesta a RQ1.
+- **Tuning de D/E** ✅ **Cerrado (2026-07-30).** Búsqueda de arquitectura/optimización del MLP
+  (proxy sobre datos agrupados) + `epocas_locales` para D + 3 variantes de personalización para E
+  + corrección de sesgo de Duan. **Resultado honesto:** la arquitectura tuneada mejora D de verdad
+  (0,1507→0,1402, ~7%) pero esa mejora NO se traslada a E (todas las variantes tuneadas quedan por
+  detrás del 0,1379/0,1396 original de la Sesión 27) — hipótesis: sobreajuste de una arquitectura
+  más grande en los datasets pequeños del fine-tuning por tienda. La corrección de Duan por tienda
+  resultó catastrófica (0,1446→0,8876) por sensibilidad a atípicos con pocas filas por tienda —
+  descartada. **Se mantiene la configuración de la Sesión 27 (arquitectura original) como el mejor
+  resultado federado del proyecto** (WMAPE test mediana=0,1379, empata con la media móvil). Ver
+  Sesión 28.
 - **T3.4** Manejo de stragglers y muestreo de clientes. *(extensión, no bloqueante)*
 - **T3.5** Comparación estadística A/B/C/D/E (Wilcoxon completo) + métrica "brecha recuperada"
   (repensar su definición dado el hallazgo de la Sesión 26/27). Figuras a `reports/figures/`.

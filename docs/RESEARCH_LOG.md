@@ -1795,6 +1795,161 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/17_condicion_e_personaliza
 
 ---
 
+## Sesión 28 — Tuning de D y E: mejora real en D, no se traslada a E (resultado honesto)
+
+**Fecha:** 2026-07-30
+**Scripts:** `src/18_tuning_arquitectura.py` (nuevo), `src/19_correccion_duan.py` (nuevo),
+`src/correccion_sesgo.py` (nuevo), `src/modelo_mlp.py` (ampliado: `ArquitecturaMLP`,
+`congelar_base`, `predecir_log`), `src/federado_flower.py` (ampliado: `arq` en todas las
+funciones), `src/16_condicion_d_federado.py` y `src/17_condicion_e_personalizacion.py`
+(reescritos)
+**Objetivo:** ninguna de las condiciones A-E había pasado por ajuste de hiperparámetros propio, a
+diferencia de LightGBM (Sesión 22). El autor pidió implementar las recomendaciones del informe
+"Cómo mejorar el federado" y medir el resultado. Plan aprobado en 4 etapas: arquitectura/
+optimización → épocas locales por ronda → estrategia de personalización → corrección de sesgo de
+Jensen (Duan). Cada etapa se decide por **val**; el resultado se reporta en **test**.
+
+### Etapa 0 — Infraestructura para hacer tuneable la arquitectura
+
+`ArquitecturaMLP` (dataclass: `dim_emb`, `hidden1`, `hidden2`, `dropout`) sustituye los valores
+fijos (64/32/0,2/8) en `MLPConEmbeddings`, `entrenar()`, `ClienteSilo` y todas las funciones de
+`federado_flower.py` que construyen un modelo -- un solo objeto en vez de proliferar kwargs
+sueltos. `entrenar()` ahora copia `modelo_inicial` con `copy.deepcopy` (no
+`MLPConEmbeddings()`+`load_state_dict`) para heredar su arquitectura exacta, no la que indique
+`arq` -- necesario porque un modelo con una arquitectura no estándar (de una búsqueda) fallaría al
+cargar su `state_dict` en un modelo de arquitectura por defecto. `congelar_base=True` congela
+`red[0]`/`red[3]` (capas densas compartidas), dejando entrenables solo los embeddings y la capa
+de salida -- estilo FedPer (Arivazhagan et al., 2019, verificado antes de citarlo). 17 tests
+nuevos, todos pasan sin cambiar el comportamiento por defecto (backward-compatible).
+
+### Etapa 1 — Búsqueda de arquitectura y optimización: mejora grande en el proxy
+
+Búsqueda aleatoria de 13 candidatos (el 1º es siempre la arquitectura original) sobre el dataset
+GLOBAL agrupado (mismo patrón que la Sesión 22 para LightGBM), seleccionando por WMAPE en escala
+natural sobre val.
+
+**Ganador:** `lr=0,002, dropout=0,1, hidden1=128, hidden2=64, dim_emb=8, batch_size=256`
+— WMAPE val (proxy) = 0,1093, frente a 0,1880 de la arquitectura original: **+41,9% de mejora**.
+Guardado en `configs/mlp_arquitectura.json`.
+
+### Etapa 2 — Épocas locales por ronda (Condición D): mejora real, confirmada en test
+
+Con la arquitectura ganadora, se probó `epocas_locales ∈ {1, 2, 3}` con FedAvg (15 rondas), más
+FedProx (μ=0,01) con `epocas_locales=2` como control.
+
+| Config | WMAPE test mediana |
+|---|---|
+| FedAvg, epocas_locales=1 | 0,1429 |
+| FedAvg, epocas_locales=2 | 0,1503 |
+| FedAvg, epocas_locales=3 | 0,2786 (mucho peor) |
+| **FedProx, epocas_locales=2** | **0,1402** ← ganador |
+
+Con `lr=0,002` (más alto que el 1e-3 original), más épocas locales por ronda deja que los silos
+se alejen más entre sincronizaciones -- `epocas_locales=3` degrada claramente. FedProx, que
+penaliza precisamente ese alejamiento, vuelve a ser mejor que FedAvg aquí (a diferencia de la
+Sesión 26, con la arquitectura original) -- probablemente porque el lr más alto sí hace que el
+término proximal tenga trabajo real que hacer.
+
+**D mejora de verdad:** 0,1402 (tuneado) frente a 0,1507 (Sesión 26, sin tunear) — **~7% mejor**,
+confirmado en test, no solo en el proxy de val.
+
+### Etapa 3 — Estrategia de personalización (Condición E): NINGUNA variante mejora al original
+
+Con el D ganador de la Etapa 2 como punto de partida, se probaron tres variantes de fine-tuning
+por tienda:
+
+| Variante | WMAPE test mediana |
+|---|---|
+| completo (lr=5e-4) | 0,1446 |
+| lr_bajo (lr=2e-4) | 0,1664 |
+| fedper (`congelar_base=True`) | 0,1558 |
+| **original, Sesión 27 (arquitectura sin tunear, regenerado)** | **0,1379** ← sigue siendo el mejor |
+
+**Ninguna de las tres variantes nuevas supera al resultado original de la Sesión 27.** Se
+regeneró ese resultado original (el checkpoint de D de la Sesión 26 seguía en disco,
+`checkpoints_federado/fedavg/ronda_3.npz`) para confirmar la cifra con el código actual: WMAPE
+test mediana = 0,1379 -- prácticamente idéntico al 0,1396 reportado entonces (pequeña variación
+por aleatoriedad de entrenamiento), y ahora **empata exactamente con la media móvil**.
+
+**Interpretación:** la arquitectura más grande (128 vs. 64 unidades ocultas) que ayudó a D
+—entrenado con las ~294.000 filas agregadas de los 3 silos— parece sobreajustar más fácilmente en
+el fine-tuning por tienda, donde cada modelo ve solo unos cientos de filas. Es un caso concreto y
+medido de que la capacidad que ayuda con mucho dato (entrenamiento federado) puede perjudicar en
+una etapa posterior con mucho menos dato por unidad (personalización) -- un hallazgo honesto, no
+el resultado que se buscaba, pero real y documentado con evidencia.
+
+### Etapa 4 — Corrección de Duan: efecto catastrófico, descartada
+
+Se aplicó el estimador de smearing de Duan (1983, verificado antes de citarlo) sobre la variante
+"completo" de la Etapa 3, con el factor de corrección calculado **por tienda** sobre los residuos
+de esa tienda en train.
+
+**Resultado: la corrección empeoró el WMAPE test mediana de 0,1446 a 0,8876** -- un desastre, no
+una mejora marginal. Diagnóstico: con solo ~200-300 filas de train por tienda, el factor
+`media(exp(residuo))` es extremadamente sensible a valores atípicos del residuo (la
+exponencial amplifica la cola derecha) -- el factor osciló entre 1,10 y **7,41** según la tienda
+(mediana 1,87, media 2,15). Unas pocas semanas mal predichas en el train de una tienda bastan
+para disparar su factor y arruinar sus predicciones en val/test.
+
+**Decisión:** se descarta la corrección de Duan a nivel tienda. Queda documentada la hipótesis
+razonable para un posible trabajo futuro: un factor GLOBAL (un solo valor para todas las tiendas,
+calculado sobre las ~294.000 filas de train agregadas, no por tienda) promediaría mejor los
+atípicos y podría funcionar -- no se probó en esta sesión, fuera del alcance ya acordado.
+
+### Veredicto final — qué configuración queda como la mejor conocida
+
+| Método | WMAPE test mediana |
+|---|---|
+| LightGBM (global, Sesión 22) | 0,1320 |
+| Media móvil (4 sem., T2.2) | 0,1379 |
+| **E — federado + personalización (Sesión 27, sin tunear, confirmado)** | **0,1379** |
+| D — FedProx tuneado (Etapa 2, sin personalizar) | 0,1402 |
+| A — Local (T2.3) | 0,1476 |
+| E — completo, arquitectura tuneada (Etapa 3) | 0,1446 |
+
+**La configuración de la Sesión 27 (arquitectura original, sin tunear) sigue siendo la mejor
+condición federada del proyecto.** El esfuerzo de tuning de esta sesión SÍ produjo una mejora real
+y medible -- para D solo, sin personalizar (0,1507→0,1402, ~7%) -- pero esa mejora no se
+propaga a E. No se fuerza un "resultado combinado ganador" que no existe: es más honesto reportar
+que el tuning tuvo éxito parcial, con evidencia clara de por qué (sobreajuste de una arquitectura
+más grande en datasets de fine-tuning pequeños), que maquillar el resultado.
+
+**Recomendación para producción:** mantener la configuración de la Sesión 27 (arquitectura
+original) como la reportada; considerar la arquitectura tuneada de esta sesión únicamente si se
+usa D sin personalizar. Trabajo futuro razonable, no realizado aquí: una búsqueda de arquitectura
+separada y más pequeña específica para la etapa de personalización, y un factor de Duan global en
+vez de por tienda.
+
+### Resultados finales de tests
+
+**89 de 89 tests pasan** (17 nuevos en `test_modelo_mlp.py`, 2 nuevos en `test_federado_flower.py`,
+7 nuevos en `test_correccion_sesgo.py`, sobre los 63 ya existentes).
+
+### Salidas
+- `src/modelo_mlp.py` — `ArquitecturaMLP`, `congelar_base`, `predecir_log`.
+- `src/federado_flower.py` — `arq` propagado a `ClienteSilo`, `evaluate_fn`, `ejecutar_federado`,
+  `cargar_mejor_ronda`.
+- `src/18_tuning_arquitectura.py`, `src/19_correccion_duan.py`, `src/correccion_sesgo.py` — nuevos.
+- `src/16_condicion_d_federado.py`, `src/17_condicion_e_personalizacion.py` — reescritos para
+  soportar múltiples configuraciones y arquitectura tuneada.
+- `configs/mlp_arquitectura.json` — arquitectura ganadora de la Etapa 1.
+- `reports/resultados_condicion_D_federado.csv`, `reports/resultados_condicion_E_personalizacion.csv`
+  (reflejan las corridas de esta sesión), `reports/resultados_condicion_E_original_sesion27.csv`
+  (regenerado para la comparación final), `reports/resultados_correccion_duan.csv`,
+  `reports/tuning_arquitectura_mlp.csv`, `reports/historial_rondas_condicion_D.csv`.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/18_tuning_arquitectura.py
+./.venv/Scripts/python.exe src/16_condicion_d_federado.py
+./.venv/Scripts/python.exe src/17_condicion_e_personalizacion.py
+./.venv/Scripts/python.exe src/19_correccion_duan.py
+./.venv/Scripts/python.exe -m pytest tests/ -v
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

@@ -1,0 +1,9 @@
+{
+  "lr": 0.002,
+  "batch_size": 256,
+  "dim_emb": 8,
+  "hidden1": 128,
+  "hidden2": 64,
+  "dropout": 0.1,
+  "wmape_val": 0.10932020410837097
+}

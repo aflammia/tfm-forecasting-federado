@@ -41,6 +41,29 @@ https://arxiv.org/abs/1812.06127
 > encontrado heterogeneidad no-IID real entre tiendas de un mismo silo. Citado por primera vez:
 > Sesión 26 (Condición D — FedAvg vs. FedProx).
 
+**Arivazhagan, M. G., Aggarwal, V., Singh, A. K., & Choudhary, S. (2019).** Federated learning
+with personalization layers. *arXiv*. https://arxiv.org/abs/1912.00818
+
+> Paper original de FedPer — combina una "base" compartida entrenada de forma federada con capas
+> de personalización que se entrenan solo localmente por cliente, sin re-entrenar la base. Base
+> conceptual de la variante `congelar_base` de la Condición E (congelar las capas densas
+> compartidas y afinar solo embeddings + capa de salida por tienda). Citado por primera vez:
+> Sesión 28 (tuning de la personalización).
+
+---
+
+## Corrección de sesgo en transformaciones logarítmicas
+
+**Duan, N. (1983).** Smearing estimate: A nonparametric retransformation method. *Journal of the
+American Statistical Association*, 78(383), 605–610. https://doi.org/10.1080/01621459.1983.10478017
+
+> Un modelo que minimiza error en escala log y deshace la transformación con `exp(ŷ)−1` subestima
+> sistemáticamente la media en escala natural (desigualdad de Jensen). El "smearing estimate" de
+> Duan corrige este sesgo multiplicando la predicción retransformada por la media de
+> `exp(residuo_log)` sobre train, sin asumir una distribución paramétrica del residuo. Aplicado
+> como corrección post-hoc sobre las predicciones ya generadas (Etapa 4 del tuning). Citado por
+> primera vez: Sesión 28.
+
 ---
 
 ## Métodos de forecasting en retail (baselines convencionales, T2.2b)

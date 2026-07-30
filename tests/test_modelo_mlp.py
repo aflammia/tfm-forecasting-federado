@@ -13,7 +13,10 @@ import pytest
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from modelo_mlp import DatasetVentas, FEATURES_CONTINUAS, MLPConEmbeddings, N_FAMILIAS, N_TIENDAS, entrenar, predecir
+from modelo_mlp import (
+    ArquitecturaMLP, DatasetVentas, FEATURES_CONTINUAS, MLPConEmbeddings, N_FAMILIAS, N_TIENDAS,
+    entrenar, predecir,
+)
 
 
 def _df_sintetico(n: int, semilla: int = 0) -> pd.DataFrame:
@@ -142,3 +145,84 @@ def test_entrenar_sin_wandb_run_no_falla():
     val_df = _df_sintetico(30, semilla=11)
     modelo, hist = entrenar(train_df, val_df, epochs=5, paciencia=5, semilla=42)
     assert hist["epocas_entrenadas"] > 0
+
+
+# ============================================================ arquitectura configurable (Sesión 28, tuning)
+
+def test_arquitectura_por_defecto_da_el_recuento_de_parametros_documentado():
+    """ArquitecturaMLP() sin argumentos debe reproducir exactamente los 4.985 parámetros
+    verificados en el diagrama de arquitectura (Sesión 22) -- ningún cambio de comportamiento
+    por defecto tras añadir la configurabilidad."""
+    modelo = MLPConEmbeddings(arq=ArquitecturaMLP())
+    assert sum(p.numel() for p in modelo.parameters()) == 4985
+
+
+def test_arquitectura_personalizada_cambia_la_forma_de_la_red():
+    arq = ArquitecturaMLP(dim_emb=16, hidden1=128, hidden2=64, dropout=0.3)
+    modelo = MLPConEmbeddings(arq=arq)
+    assert modelo.emb_familia.weight.shape == (N_FAMILIAS, 16)
+    assert modelo.emb_tienda.weight.shape == (N_TIENDAS, 16)
+    assert modelo.red[0].out_features == 128
+    assert modelo.red[3].out_features == 64
+    assert modelo.red[2].p == 0.3
+
+
+def test_entrenar_propaga_arq_al_crear_el_modelo_desde_cero():
+    train_df = _df_sintetico(80, semilla=12)
+    val_df = _df_sintetico(24, semilla=13)
+    arq = ArquitecturaMLP(dim_emb=4, hidden1=16, hidden2=8, dropout=0.1)
+    modelo, _ = entrenar(train_df, val_df, epochs=3, paciencia=3, semilla=42, arq=arq)
+    assert modelo.emb_familia.weight.shape == (N_FAMILIAS, 4)
+    assert modelo.red[0].out_features == 16
+
+
+# ============================================================ congelar_base -- personalización FedPer (Sesión 28)
+
+def test_entrenar_con_modelo_inicial_hereda_su_arquitectura_no_la_de_arq():
+    """Si modelo_inicial tiene una arquitectura no estándar, entrenar() debe copiarla con
+    copy.deepcopy -- no reconstruir con MLPConEmbeddings(arq=...) y cargar el state_dict, que
+    fallaría por incompatibilidad de formas si arq no coincide."""
+    train_df = _df_sintetico(60, semilla=14)
+    val_df = _df_sintetico(20, semilla=15)
+    arq_no_estandar = ArquitecturaMLP(dim_emb=4, hidden1=16, hidden2=8)
+    modelo_previo, _ = entrenar(train_df, val_df, epochs=2, paciencia=2, semilla=1, arq=arq_no_estandar)
+
+    # arq por defecto (33 dim de entrada por ejemplo) NO debe usarse -- debe heredarse la de modelo_previo
+    modelo_continuado, _ = entrenar(train_df, val_df, epochs=0, paciencia=1, semilla=2,
+                                     modelo_inicial=modelo_previo)
+    assert modelo_continuado.red[0].out_features == 16
+    assert modelo_continuado.emb_familia.weight.shape == (N_FAMILIAS, 4)
+
+
+def test_congelar_base_deja_las_capas_densas_compartidas_sin_cambiar():
+    train_df = _df_sintetico(120, semilla=16)
+    val_df = _df_sintetico(30, semilla=17)
+    modelo_global, _ = entrenar(train_df, val_df, epochs=5, paciencia=5, semilla=1)
+    pesos_base_antes = modelo_global.red[0].weight.detach().clone()
+
+    modelo_personalizado, _ = entrenar(
+        train_df, val_df, epochs=5, paciencia=5, lr=0.05, semilla=2,
+        modelo_inicial=modelo_global, congelar_base=True,
+    )
+    assert torch.allclose(pesos_base_antes, modelo_personalizado.red[0].weight)
+
+
+def test_congelar_base_si_permite_que_cambien_embeddings_y_capa_de_salida():
+    """red[5] es la capa de salida (red[4] es un ReLU, sin pesos)."""
+    train_df = _df_sintetico(120, semilla=18)
+    val_df = _df_sintetico(30, semilla=19)
+    modelo_global, _ = entrenar(train_df, val_df, epochs=5, paciencia=5, semilla=1)
+    salida_antes = modelo_global.red[5].weight.detach().clone()
+
+    modelo_personalizado, _ = entrenar(
+        train_df, val_df, epochs=8, paciencia=8, lr=0.05, semilla=2,
+        modelo_inicial=modelo_global, congelar_base=True,
+    )
+    assert not torch.allclose(salida_antes, modelo_personalizado.red[5].weight)
+
+
+def test_congelar_base_sin_modelo_inicial_lanza_error():
+    train_df = _df_sintetico(50, semilla=20)
+    val_df = _df_sintetico(20, semilla=21)
+    with pytest.raises(ValueError):
+        entrenar(train_df, val_df, epochs=1, congelar_base=True)

@@ -12,6 +12,8 @@ Pérdida Huber sobre log(1+ventas) (robusta al pico del terremoto de abril 2016,
 Optimizador Adam. 4.985 parámetros (recuento exacto verificado, no la estimación aproximada
 original de la Sesión 5).
 """
+from dataclasses import dataclass
+import copy
 from typing import Optional
 
 import numpy as np
@@ -30,6 +32,18 @@ FEATURES_CONTINUAS = [
 N_FAMILIAS = 33
 N_TIENDAS = 54
 DIM_EMBEDDING = 8
+
+
+@dataclass(frozen=True)
+class ArquitecturaMLP:
+    """Hiperparámetros de forma del MLP -- agrupados en un solo objeto (Sesión 28, tuning) en vez
+    de proliferar kwargs sueltos por las muchas funciones que construyen el modelo (entrenar(),
+    ClienteSilo, evaluate_fn, cargar_mejor_ronda...). Los valores por defecto son la arquitectura
+    original de la Sesión 5/22 (33→64→32→1, dropout 0,2, embeddings de 8 dim)."""
+    dim_emb: int = DIM_EMBEDDING
+    hidden1: int = 64
+    hidden2: int = 32
+    dropout: float = 0.2
 
 
 class DatasetVentas(Dataset):
@@ -51,19 +65,21 @@ class DatasetVentas(Dataset):
 
 
 class MLPConEmbeddings(nn.Module):
-    """33 -> 64 -> 32 -> 1. Ver docstring del módulo y RESEARCH_LOG Sesión 5 / 22 (diagrama de
-    arquitectura publicado como artefacto) para la justificación de cada elección de diseño."""
+    """33 -> 64 -> 32 -> 1 por defecto (configurable vía `arq`, Sesión 28). Ver docstring del
+    módulo y RESEARCH_LOG Sesión 5 / 22 (diagrama de arquitectura publicado como artefacto) para
+    la justificación de cada elección de diseño original."""
 
     def __init__(self, n_familias: int = N_FAMILIAS, n_tiendas: int = N_TIENDAS,
-                 dim_emb: int = DIM_EMBEDDING, n_continuas: int = len(FEATURES_CONTINUAS)):
+                 n_continuas: int = len(FEATURES_CONTINUAS), arq: ArquitecturaMLP = ArquitecturaMLP()):
         super().__init__()
-        self.emb_familia = nn.Embedding(n_familias, dim_emb)
-        self.emb_tienda = nn.Embedding(n_tiendas, dim_emb)
-        entrada = n_continuas + 2 * dim_emb
+        self.arq = arq
+        self.emb_familia = nn.Embedding(n_familias, arq.dim_emb)
+        self.emb_tienda = nn.Embedding(n_tiendas, arq.dim_emb)
+        entrada = n_continuas + 2 * arq.dim_emb
         self.red = nn.Sequential(
-            nn.Linear(entrada, 64), nn.ReLU(), nn.Dropout(0.2),
-            nn.Linear(64, 32), nn.ReLU(),
-            nn.Linear(32, 1),
+            nn.Linear(entrada, arq.hidden1), nn.ReLU(), nn.Dropout(arq.dropout),
+            nn.Linear(arq.hidden1, arq.hidden2), nn.ReLU(),
+            nn.Linear(arq.hidden2, 1),
         )
 
     def forward(self, x_cont: torch.Tensor, family_id: torch.Tensor, store_id: torch.Tensor) -> torch.Tensor:
@@ -85,6 +101,8 @@ def entrenar(
     verbose: bool = False,
     wandb_run: Optional[object] = None,
     modelo_inicial: Optional[MLPConEmbeddings] = None,
+    arq: ArquitecturaMLP = ArquitecturaMLP(),
+    congelar_base: bool = False,
 ) -> tuple[MLPConEmbeddings, dict]:
     """Entrena un MLPConEmbeddings (Huber loss, Adam) con early stopping sobre val_loss.
     Devuelve el modelo con los MEJORES pesos vistos (no los últimos, que pueden estar ya
@@ -97,14 +115,34 @@ def entrenar(
 
     `modelo_inicial` es opcional -- si se pasa, el entrenamiento CONTINÚA desde esos pesos en vez
     de partir de una inicialización aleatoria (uso: personalización post-federado, condición E,
-    T3.3 -- fine-tuning por tienda a partir del modelo global ya convergido)."""
+    T3.3 -- fine-tuning por tienda a partir del modelo global ya convergido). Se copia con
+    `copy.deepcopy` (no se reconstruye con `MLPConEmbeddings()` + `load_state_dict`) para heredar
+    también su arquitectura exacta, no la que indique `arq` -- si `modelo_inicial` viene de una
+    búsqueda de arquitectura (Sesión 28) con un ancho de capas distinto al de fábrica, reconstruir
+    con la arquitectura por defecto y cargar su `state_dict()` fallaría por incompatibilidad de
+    formas. `arq` solo se usa cuando se parte de cero (`modelo_inicial=None`).
+
+    `congelar_base` (Sesión 28, personalización estilo FedPer): con `modelo_inicial` dado, congela
+    las dos capas densas compartidas (`red[0]`, `red[3]`) y deja entrenables solo los embeddings
+    de familia/tienda y la capa de salida (`red[5]`) -- la idea de FedPer (Arivazhagan et al.,
+    2019) es que la "base" aprendida de forma federada generaliza bien y no hace falta
+    reentrenarla por tienda; solo la parte más específica de la entidad necesita personalizarse."""
     torch.manual_seed(semilla)
     if modelo_inicial is not None:
-        modelo = MLPConEmbeddings()
-        modelo.load_state_dict(modelo_inicial.state_dict())
+        modelo = copy.deepcopy(modelo_inicial)
     else:
-        modelo = MLPConEmbeddings()
-    opt = torch.optim.Adam(modelo.parameters(), lr=lr)
+        if congelar_base:
+            raise ValueError("congelar_base=True requiere modelo_inicial (no tiene sentido "
+                              "congelar capas de un modelo inicializado al azar)")
+        modelo = MLPConEmbeddings(arq=arq)
+
+    if congelar_base:
+        for p in modelo.red[0].parameters():
+            p.requires_grad = False
+        for p in modelo.red[3].parameters():
+            p.requires_grad = False
+
+    opt = torch.optim.Adam((p for p in modelo.parameters() if p.requires_grad), lr=lr)
     perdida_fn = nn.HuberLoss()
 
     dl_train = DataLoader(DatasetVentas(train_df), batch_size=batch_size, shuffle=True)
@@ -158,10 +196,16 @@ def entrenar(
     return modelo, historial
 
 
-def predecir(modelo: MLPConEmbeddings, df: pd.DataFrame) -> np.ndarray:
-    """Predicciones en ESCALA NATURAL de ventas (expm1 de la salida en log_ventas)."""
+def predecir_log(modelo: MLPConEmbeddings, df: pd.DataFrame) -> np.ndarray:
+    """Predicción CRUDA del modelo, en escala log_ventas -- sin expm1 ni recorte. Uso: la
+    corrección de sesgo de Duan (Etapa 4, Sesión 28) necesita los residuos en escala log, no las
+    ventas ya retransformadas."""
     modelo.eval()
     ds = DatasetVentas(df)
     with torch.no_grad():
-        pred_log = modelo(ds.x_cont, ds.family_id, ds.store_id).numpy()
-    return np.clip(np.expm1(pred_log), 0, None)
+        return modelo(ds.x_cont, ds.family_id, ds.store_id).numpy()
+
+
+def predecir(modelo: MLPConEmbeddings, df: pd.DataFrame) -> np.ndarray:
+    """Predicciones en ESCALA NATURAL de ventas (expm1 de la salida en log_ventas)."""
+    return np.clip(np.expm1(predecir_log(modelo, df)), 0, None)

@@ -37,7 +37,7 @@ from flwr.server import ServerApp, ServerConfig
 from flwr.server.strategy import FedAvg, FedProx
 from flwr.simulation import run_simulation
 
-from modelo_mlp import DatasetVentas, MLPConEmbeddings
+from modelo_mlp import ArquitecturaMLP, DatasetVentas, MLPConEmbeddings
 
 
 def get_params(modelo: MLPConEmbeddings) -> list[np.ndarray]:
@@ -64,12 +64,12 @@ class ClienteSilo(NumPyClient):
     precisamente la diferencia entre entrenar de una vez (A/B/C) y FedAvg iterativo (D)."""
 
     def __init__(self, silo: str, train_df: pd.DataFrame, epocas_locales: int = 1,
-                 lr: float = 1e-3, batch_size: int = 256):
+                 lr: float = 1e-3, batch_size: int = 256, arq: ArquitecturaMLP = ArquitecturaMLP()):
         self.silo = silo
         self.epocas_locales = epocas_locales
         self.lr = lr
         self.batch_size = batch_size
-        self.modelo = MLPConEmbeddings()
+        self.modelo = MLPConEmbeddings(arq=arq)
         self.dl_train = DataLoader(DatasetVentas(train_df), batch_size=batch_size, shuffle=True)
 
     def get_parameters(self, config):
@@ -105,25 +105,28 @@ class ClienteSilo(NumPyClient):
         return 0.0, len(self.dl_train.dataset), {}
 
 
-def _hacer_client_fn(datos_por_silo: dict[str, pd.DataFrame], epocas_locales: int):
+def _hacer_client_fn(datos_por_silo: dict[str, pd.DataFrame], epocas_locales: int,
+                      lr: float, arq: ArquitecturaMLP):
     silos = sorted(datos_por_silo.keys())
 
     def client_fn(context: Context):
         idx = context.node_config["partition-id"]
         silo = silos[idx]
-        return ClienteSilo(silo, datos_por_silo[silo], epocas_locales=epocas_locales).to_client()
+        return ClienteSilo(silo, datos_por_silo[silo], epocas_locales=epocas_locales,
+                            lr=lr, arq=arq).to_client()
 
     return client_fn
 
 
-def _hacer_evaluate_fn(val_global: pd.DataFrame, checkpoints_dir: Path, historial_perdidas: dict):
+def _hacer_evaluate_fn(val_global: pd.DataFrame, checkpoints_dir: Path, historial_perdidas: dict,
+                        arq: ArquitecturaMLP):
     """`historial_perdidas` es un dict MUTABLE pasado por el llamador -- `run_simulation()` no
     devuelve nada (a diferencia de la API clásica `start_simulation`/`History`), así que esta es
     la forma de recuperar la pérdida centralizada de cada ronda una vez termina la simulación."""
     checkpoints_dir.mkdir(parents=True, exist_ok=True)
     dl_val = DataLoader(DatasetVentas(val_global), batch_size=2048, shuffle=False)
     perdida_fn = nn.HuberLoss()
-    modelo_temp = MLPConEmbeddings()
+    modelo_temp = MLPConEmbeddings(arq=arq)
 
     def evaluate_fn(server_round, parameters, config):
         set_params(modelo_temp, parameters)
@@ -151,21 +154,26 @@ def ejecutar_federado(
     proximal_mu: float = 0.0,
     num_rounds: int = 30,
     epocas_locales: int = 2,
+    lr: float = 1e-3,
     semilla: int = 42,
+    arq: ArquitecturaMLP = ArquitecturaMLP(),
 ) -> dict[int, float]:
     """Ejecuta una simulación FedAvg o FedProx sobre los silos dados. Devuelve el historial de
     pérdida centralizada por ronda ({ronda: val_loss}); los pesos de cada ronda quedan en
-    `checkpoints_dir` (ver `cargar_mejor_ronda`)."""
+    `checkpoints_dir` (ver `cargar_mejor_ronda`).
+
+    `arq` (Sesión 28, tuning): arquitectura del MLP -- debe coincidir en cliente, evaluate_fn y
+    modelo inicial, o el promediado de pesos entre silos fallaría por formas incompatibles."""
     if checkpoints_dir.exists():
         shutil.rmtree(checkpoints_dir)
     torch.manual_seed(semilla)
 
     n_clientes = len(datos_por_silo)
-    client_app = ClientApp(client_fn=_hacer_client_fn(datos_por_silo, epocas_locales))
+    client_app = ClientApp(client_fn=_hacer_client_fn(datos_por_silo, epocas_locales, lr, arq))
     historial_perdidas: dict[int, float] = {}
-    evaluate_fn = _hacer_evaluate_fn(val_global, checkpoints_dir, historial_perdidas)
+    evaluate_fn = _hacer_evaluate_fn(val_global, checkpoints_dir, historial_perdidas, arq)
 
-    modelo_inicial = MLPConEmbeddings()
+    modelo_inicial = MLPConEmbeddings(arq=arq)
     parametros_iniciales = ndarrays_to_parameters(get_params(modelo_inicial))
 
     kwargs_estrategia = dict(
@@ -191,10 +199,11 @@ def ejecutar_federado(
     return historial_perdidas
 
 
-def cargar_mejor_ronda(checkpoints_dir: Path, historial_perdidas: dict[int, float]) -> MLPConEmbeddings:
+def cargar_mejor_ronda(checkpoints_dir: Path, historial_perdidas: dict[int, float],
+                        arq: ArquitecturaMLP = ArquitecturaMLP()) -> MLPConEmbeddings:
     mejor_ronda = min(historial_perdidas, key=historial_perdidas.get)
     datos = np.load(checkpoints_dir / f"ronda_{mejor_ronda}.npz")
     parametros = [datos[k] for k in datos.files]
-    modelo = MLPConEmbeddings()
+    modelo = MLPConEmbeddings(arq=arq)
     set_params(modelo, parametros)
     return modelo, mejor_ronda
