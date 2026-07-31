@@ -1950,6 +1950,151 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/18_tuning_arquitectura.py
 
 ---
 
+## Sesión 29 — Fase 4 (MLOps): CI, Docker, dashboard, DVC, Hydra
+
+**Fecha:** 2026-07-31
+**Archivos nuevos:** `.github/workflows/ci.yml`, `pyproject.toml`, `Dockerfile`,
+`.devcontainer/devcontainer.json`, `dashboard/app.py`, `dvc.yaml`, `.dvc/`, `.dvcignore`,
+`conf/` (Hydra: `config.yaml`, `paths/default.yaml`, `modelo/mlp.yaml`,
+`tuning_arquitectura.yaml`, `condicion_d.yaml`)
+**Archivos modificados:** `src/12_condicion_a_local.py`, `13_condicion_b_silo.py`,
+`14_condicion_c_global.py`, `16_condicion_d_federado.py`, `18_tuning_arquitectura.py` (Hydra),
+`src/modelo_mlp.py`, `src/federado_flower.py` (3 correcciones reales encontradas por mypy),
+`requirements.txt`, `.gitignore`
+**Objetivo:** Fase 3 (core) y el tuning de D/E (Sesión 28) están cerrados. Toca la Fase 4 del
+`PLAN.md` -- el stack MLOps. El autor pidió el alcance completo (Hydra, DVC, CI/CD, Docker, Azure
+ML, Streamlit), no una versión recortada, confirmando que la cuenta de Azure for Students aún no
+está lista -- Azure ML queda fuera de esta sesión (no tiene sentido escribir código no probable de
+extremo a extremo).
+
+### CI — GitHub Actions (ruff + mypy + pytest)
+
+`pyproject.toml` nuevo con `[tool.ruff]` (`select = ["E", "F", "I"]`, ignora `E501` y un puñado de
+reglas de estilo puro en scripts de EDA/figuras de las Fases 1-2 ya cerrados y verificados --
+tocarlos por estética es riesgo sin beneficio) y `[tool.mypy]` (permisivo: sin anotaciones de tipo
+en todo el código existente, solo señala errores reales). `ruff check --fix` aplicó 30 fixes
+mecánicos (orden de imports, imports sin usar) sin tocar comportamiento -- confirmado con
+`pytest tests/ -v` antes/después (72/72). mypy, corriendo por primera vez sobre el repo, encontró
+**3 discrepancias reales** entre lo declarado y lo que el código hacía de verdad (nunca afectaron
+en tiempo de ejecución -- Python no aplica type hints -- pero eran documentación incorrecta):
+- `federado_flower.cargar_mejor_ronda()` declaraba `-> MLPConEmbeddings` pero siempre devolvía
+  una tupla `(modelo, ronda)` -- corregido a `-> tuple[MLPConEmbeddings, int]`.
+- `federado_flower._hacer_client_fn`: `idx = context.node_config["partition-id"]` sin cast --
+  Flower tipa `node_config` como unión laxa (`bool | float | int | str`); se usaba siempre como
+  índice de lista. Corregido con `int(...)` explícito.
+- `modelo_mlp.entrenar()`: `historial = {"train_loss": [], "val_loss": []}` sin anotar hacía que
+  mypy infiriera `dict[str, list]`, y las asignaciones posteriores de `mejor_val_loss`/
+  `epocas_entrenadas` (float/int) no encajaban. Anotado explícitamente `dict[str, Any]` -- es
+  deliberadamente un diccionario de resultados heterogéneo.
+
+El resto de avisos de mypy (~26) son fricción de los stubs de numpy/pandas/matplotlib/pytorch
+sobre código sin anotar (`RandomState.choice` con listas heterogéneas, `dict_keys` pasado a
+`Axes.bar`, etc.) -- no bugs reales, confirmados uno a uno antes de descartarlos. El paso de mypy
+en el CI corre en modo informativo (`continue-on-error: true`): reporta pero no bloquea, dado que
+un retipado completo del repo está fuera de alcance ("no sobre-ingeniería").
+
+`tests/test_data_pipeline.py` lee `data/processed/*.parquet` reales (gitignored) -- un runner de
+GitHub Actions limpio no los tiene. Se añadió un guard a nivel de módulo
+(`pytest.skip(..., allow_module_level=True)` si `dataset_features.parquet` no existe) que salta
+sus 17 tests como un único "skipped" en vez de fallar. Verificado localmente ocultando
+`data/processed/` temporalmente: 54 passed + 2 skipped (el guard nuevo + un guard ya existente en
+`test_baselines_convencionales.py`), sin datos.
+
+### Docker + devcontainer
+
+`Dockerfile` (Python 3.11-slim, `pip install -r requirements.txt`, copia `src/`/`configs/`/
+`conf/`/`tests/`; `ENTRYPOINT ["python"]`, `CMD` por defecto corre la suite de tests). Build
+verificado con éxito (`docker build .`, exit 0). La verificación en tiempo de ejecución
+(`docker run`) quedó incompleta -- el daemon de Docker Desktop dejó de responder justo después del
+build exitoso, fuera de control de esta sesión; el build en sí es la parte que demuestra que el
+Dockerfile es correcto (dependencias instalables, capas copiables). `.devcontainer/
+devcontainer.json` apunta al mismo Dockerfile.
+
+### Dashboard Streamlit
+
+`dashboard/app.py` -- 3 pestañas: comparación de los ~13 métodos ya cerrados (tabla + barras,
+ordenado por WMAPE mediana, split val/test seleccionable), convergencia federada por ronda
+(`historial_rondas_condicion_D.csv`, línea por config), y detalle por serie de la Condición E
+(`por_serie_condicion_E_test.csv`, filtrable por tienda). **Ajuste sobre el plan original:** la
+tercera pestaña iba a mostrar "predicción vs. real por tienda" en el tiempo, pero no existe ningún
+CSV con predicciones semana a semana guardadas (los scripts solo persisten métricas ya agregadas
+por serie) -- mostrar eso habría exigido inventar datos. Se cambió a la distribución de
+WMAPE/MASE/RMSSE por serie, que sí está respaldada por datos reales. Verificado con
+`streamlit run --headless` + `curl` al endpoint `/_stcore/health` (`ok`, sin excepciones en el
+log).
+
+### DVC — versionado de datos
+
+`dvc init` + remoto **local** (`../dvc-storage-tfm/`, fuera del repo -- no requiere ninguna cuenta
+nueva; se puede repuntar a Azure Blob más adelante sin tocar el resto del flujo). `dvc.yaml`
+declara 5 etapas deterministas trazadas leyendo las entradas/salidas reales de cada script:
+`descargar_datos` (00) → `generar_silos` (04) → `construir_dataset` (05) → `split_temporal` (06)
+→ `feature_engineering` (08). Los outputs JSON pequeños (`split_config.json`,
+`normalizacion.json`) se declaran con `cache: false` -- siguen versionados como texto plano en
+git, no movidos al almacén de DVC.
+
+**Verificación real, no simulada:** `dvc repro` ejecutó el pipeline completo desde cero (incluida
+la descarga de Kaggle, idempotente) y **reprodujo exactamente** las cifras ya documentadas:
+399.762 filas tras agregar a semana, 222.057 filas recortadas por apertura tardía (7,40%), 10.197
+filas de semanas parciales excluidas (2,55%), 6.633 huecos internos reintroducidos como NaN,
+322.245 filas finales -- todas coinciden dígito a dígito con lo registrado en Sesiones 11-19. Los
+27 tests de `test_data_pipeline.py`/`test_baselines_convencionales.py` pasan contra los datos
+regenerados. Gotcha de Windows: DVC ejecuta `cmd` vía `cmd.exe`, que no reconoce
+`./.venv/Scripts/python.exe` (la sintaxis `./` de Git Bash) -- corregido a `.venv\Scripts\
+python.exe`.
+
+### Hydra — config de experimentos (alcance acotado deliberadamente)
+
+`conf/paths/default.yaml` (rutas compartidas) + `conf/modelo/mlp.yaml` (arquitectura de fábrica,
+Sesión 5/22) + `conf/config.yaml` (defaults compartido). Migrados a `@hydra.main` los scripts 12
+(A), 13 (B), 14 (C) -- comparten `config.yaml`, antes no exponían ni arquitectura ni `lr` como
+argumento de `entrenar()` -- y 18 (búsqueda de arquitectura, `conf/tuning_arquitectura.yaml`:
+`n_candidatos`, `semilla`, `espacio_busqueda`, `baseline`) y 16 (Condición D,
+`conf/condicion_d.yaml`: `num_rounds`, `epocas_locales_a_probar`, `proximal_mu`).
+
+**17 (Condición E) y 19 (corrección de Duan) se dejan deliberadamente SIN Hydra.** Motivo: ya
+cargan su arquitectura dinámicamente desde `configs/mlp_arquitectura.json` (con su propio
+fallback) -- un mecanismo de config ya existente, no una constante fija a reemplazar -- y 19
+importa `VARIANTES` directamente del módulo 17 vía `importlib.import_module` para saber cuál fue
+la variante ganadora; forzar `VARIANTES` a través de Hydra habría roto ese acoplamiento o añadido
+complejidad sin beneficio real proporcional. Es la misma decisión de alcance que ya excluyó a los
+módulos de librería (`modelo_mlp.py`, `federado_flower.py`) del plan original: ya reciben sus
+parámetros por argumento.
+
+**Verificación real:** `python src/14_condicion_c_global.py --cfg job` confirma que el config
+resuelto es idéntico a los valores de fábrica previos (dim_emb=8, hidden1=64, hidden2=32,
+dropout=0,2, lr=0,001). Una corrida completa end-to-end de `14_condicion_c_global.py` (ahora vía
+Hydra) reprodujo **exactamente** el resultado ya documentado de la Condición C: WMAPE test
+mediana=0,1736 (val=0,1897) -- confirma que el refactor no cambió el comportamiento por defecto de
+ningún script.
+
+### Fuera de esta sesión
+
+Azure ML (registro de modelos) -- bloqueado por la cuenta de Azure for Students, sigue pendiente
+en `STATE.md`. Verificación en tiempo de ejecución de Docker (`docker run`) -- el build fue
+exitoso pero el daemon dejó de responder antes de poder confirmar la ejecución del contenedor.
+
+### Resultados finales
+
+**72/72 tests pasan.** `ruff check .` limpio. `dvc repro` reproduce el pipeline completo con
+cifras idénticas a las documentadas. Un script Hydra-ficado (14) reproduce exactamente su
+resultado histórico end-to-end.
+
+### Reproducibilidad
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+./.venv/Scripts/python.exe -m pytest tests/ -v
+./.venv/Scripts/python.exe -m ruff check .
+./.venv/Scripts/python.exe -m mypy src/
+./.venv/Scripts/python.exe -m dvc repro
+docker build -t tfm-federado .
+streamlit run dashboard/app.py
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/14_condicion_c_global.py  # config de fábrica
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/14_condicion_c_global.py modelo.hidden1=128  # override CLI
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

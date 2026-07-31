@@ -12,8 +12,9 @@ Métricas de heterogeneidad entre silos:
   - Ratio de ESCALA (venta media por tienda: mayor / menor silo)
   - Diferencia de INTENSIDAD PROMOCIONAL entre silos
 """
-from pathlib import Path
 from itertools import combinations
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 

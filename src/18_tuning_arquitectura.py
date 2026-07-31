@@ -17,42 +17,39 @@ import json
 import sys
 from pathlib import Path
 
+import hydra
 import numpy as np
 import pandas as pd
+from omegaconf import DictConfig, OmegaConf
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from modelo_mlp import ArquitecturaMLP, entrenar, predecir
 from metrics import wmape
+from modelo_mlp import ArquitecturaMLP, entrenar, predecir
 
-PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
-CONFIGS = Path(__file__).resolve().parents[1] / "configs"
-
-ESPACIO_BUSQUEDA = {
-    "lr": [5e-4, 1e-3, 2e-3],
-    "dropout": [0.1, 0.2, 0.3],
-    "hidden1": [64, 96, 128],
-    "dim_emb": [8, 16],
-    "batch_size": [128, 256],
-}
-
-BASELINE = {"lr": 1e-3, "dropout": 0.2, "hidden1": 64, "dim_emb": 8, "batch_size": 256}
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def _candidatos(n: int, semilla: int) -> list[dict]:
-    claves = list(ESPACIO_BUSQUEDA.keys())
-    candidatos = [dict(BASELINE)]
+def _candidatos(espacio_busqueda: dict, baseline: dict, n: int, semilla: int) -> list[dict]:
+    claves = list(espacio_busqueda.keys())
+    candidatos = [dict(baseline)]
     for i in range(n):
         rng = np.random.RandomState(semilla + i)
-        candidatos.append({k: rng.choice(ESPACIO_BUSQUEDA[k]).item() for k in claves})
+        candidatos.append({k: rng.choice(espacio_busqueda[k]).item() for k in claves})
     return candidatos
 
 
-def main(n_candidatos: int = 12, semilla: int = 42) -> None:
-    features = pd.read_parquet(PROCESSED / "dataset_features.parquet")
+@hydra.main(config_path="../conf", config_name="tuning_arquitectura", version_base=None)
+def main(cfg: DictConfig) -> None:
+    processed = ROOT / cfg.paths.processed
+    configs_dir = ROOT / cfg.paths.configs
+    espacio_busqueda = OmegaConf.to_container(cfg.espacio_busqueda, resolve=True)
+    baseline = OmegaConf.to_container(cfg.baseline, resolve=True)
+
+    features = pd.read_parquet(processed / "dataset_features.parquet")
     train = features[features.split == "train"]
     val = features[features.split == "val"]
 
-    candidatos = _candidatos(n_candidatos, semilla)
+    candidatos = _candidatos(espacio_busqueda, baseline, cfg.n_candidatos, cfg.semilla)
     resultados = []
     mejor_config, mejor_wmape, mejor_arq = None, np.inf, None
 
@@ -80,20 +77,18 @@ def main(n_candidatos: int = 12, semilla: int = 42) -> None:
     print(f"Mejora sobre la arquitectura original (WMAPE val {resultados[0]['wmape_val']:.4f}): "
           f"{mejora_pct:+.1f}%")
 
-    CONFIGS.mkdir(parents=True, exist_ok=True)
+    configs_dir.mkdir(parents=True, exist_ok=True)
     salida = {
         "lr": mejor_config["lr"], "batch_size": int(mejor_config["batch_size"]),
         "dim_emb": mejor_arq.dim_emb, "hidden1": mejor_arq.hidden1,
         "hidden2": mejor_arq.hidden2, "dropout": mejor_arq.dropout,
         "wmape_val": mejor_wmape,
     }
-    with open(CONFIGS / "mlp_arquitectura.json", "w", encoding="utf-8") as f:
+    with open(configs_dir / "mlp_arquitectura.json", "w", encoding="utf-8") as f:
         json.dump(salida, f, indent=2, ensure_ascii=False)
-    print(f"Guardado: {CONFIGS / 'mlp_arquitectura.json'}")
+    print(f"Guardado: {configs_dir / 'mlp_arquitectura.json'}")
 
-    pd.DataFrame(resultados).to_csv(
-        Path(__file__).resolve().parents[1] / "reports" / "tuning_arquitectura_mlp.csv", index=False
-    )
+    pd.DataFrame(resultados).to_csv(ROOT / cfg.paths.reports / "tuning_arquitectura_mlp.csv", index=False)
 
 
 if __name__ == "__main__":

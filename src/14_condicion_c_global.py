@@ -10,25 +10,32 @@ frente a la que se mide cuánta brecha recupera el federado (D) sin necesitar es
 import sys
 from pathlib import Path
 
+import hydra
 import pandas as pd
+from omegaconf import DictConfig
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from modelo_mlp import entrenar, predecir
 from metrics import metricas_por_serie, resumen
+from modelo_mlp import ArquitecturaMLP, entrenar, predecir
 
-PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
-REPORTS = Path(__file__).resolve().parents[1] / "reports"
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def main() -> None:
-    features = pd.read_parquet(PROCESSED / "dataset_features.parquet")
+@hydra.main(config_path="../conf", config_name="config", version_base=None)
+def main(cfg: DictConfig) -> None:
+    processed = ROOT / cfg.paths.processed
+    reports = ROOT / cfg.paths.reports
+    arq = ArquitecturaMLP(dim_emb=cfg.modelo.dim_emb, hidden1=cfg.modelo.hidden1,
+                           hidden2=cfg.modelo.hidden2, dropout=cfg.modelo.dropout)
+
+    features = pd.read_parquet(processed / "dataset_features.parquet")
     train = features[features.split == "train"]
     val = features[features.split == "val"]
     eval_ = features[features.split.isin(["val", "test"])]
 
     print(f"Entrenando MLP centralizado global: {features['store_nbr'].nunique()} tiendas, "
           f"{len(train)} filas de train, {len(val)} de val")
-    modelo, hist = entrenar(train, val)
+    modelo, hist = entrenar(train, val, arq=arq, lr=cfg.modelo.lr)
     print(f"  {hist['epocas_entrenadas']} épocas, mejor val_loss={hist['mejor_val_loss']:.4f}")
 
     pred = predecir(modelo, eval_)
@@ -56,8 +63,8 @@ def main() -> None:
         filas_resumen.append(fila)
 
     df_resumen = pd.DataFrame(filas_resumen)
-    REPORTS.mkdir(parents=True, exist_ok=True)
-    out = REPORTS / "resultados_condicion_C_global.csv"
+    reports.mkdir(parents=True, exist_ok=True)
+    out = reports / "resultados_condicion_C_global.csv"
     df_resumen.to_csv(out, index=False)
     print(f"\nGuardado: {out}")
     print(df_resumen.to_string(index=False))

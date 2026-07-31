@@ -3,9 +3,10 @@
 Complementa las 5 figuras ya generadas por 07_report_figures.py.
 """
 from pathlib import Path
-import numpy as np
-import pandas as pd
+
 import matplotlib
+import pandas as pd
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 

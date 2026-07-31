@@ -10,6 +10,7 @@ tras el GATE de T1.1 y su validación con una segunda métrica independiente
   Pequeño = tipos E + C     (19 tiendas, venta media/tienda ~11,8M)
 """
 from pathlib import Path
+
 import pandas as pd
 
 RAW = Path(__file__).resolve().parents[1] / "data" / "raw"

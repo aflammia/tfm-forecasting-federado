@@ -15,11 +15,12 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from modelo_mlp import entrenar, predecir_log
+import importlib
+
 from correccion_sesgo import aplicar_correccion_duan, factor_correccion_duan
 from metrics import metricas_por_serie, resumen
+from modelo_mlp import entrenar, predecir_log
 
-import importlib
 m17 = importlib.import_module("17_condicion_e_personalizacion")
 
 PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
@@ -106,7 +107,7 @@ def main() -> None:
     print(f"\nGuardado: {out}")
     print(df_resumen.to_string(index=False))
 
-    print(f"\nFactor de Duan -- distribución entre tiendas:")
+    print("\nFactor de Duan -- distribución entre tiendas:")
     print(predicciones.drop_duplicates("store_nbr")["factor_duan"].describe())
 
 

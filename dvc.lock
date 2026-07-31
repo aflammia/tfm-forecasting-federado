@@ -1,0 +1,103 @@
+schema: '2.0'
+stages:
+  descargar_datos:
+    cmd: .venv\Scripts\python.exe src/00_download_data.py
+    deps:
+    - path: src/00_download_data.py
+      hash: md5
+      md5: 4c6b9722baab96d325be5a1f874c9e8e
+      size: 1545
+    outs:
+    - path: data/raw
+      hash: md5
+      md5: 5091e16b79e401068c0c6c2be43dd45f.dir
+      size: 147178063
+      nfiles: 8
+  generar_silos:
+    cmd: .venv\Scripts\python.exe src/04_generate_silos.py
+    deps:
+    - path: data/raw/stores.csv
+      hash: md5
+      md5: 8414fbafbc7dcb33498d1a3c0cf2fda6
+      size: 1387
+    - path: src/04_generate_silos.py
+      hash: md5
+      md5: 3e0ed160ba349f30b65e622d4a698634
+      size: 1619
+    outs:
+    - path: data/processed/stores_silos.csv
+      hash: md5
+      md5: 5dd527cfe04f617ca7afe7c028234b66
+      size: 1870
+  construir_dataset:
+    cmd: .venv\Scripts\python.exe src/05_build_modeling_dataset.py
+    deps:
+    - path: data/processed/stores_silos.csv
+      hash: md5
+      md5: 5dd527cfe04f617ca7afe7c028234b66
+      size: 1870
+    - path: data/raw/holidays_events.csv
+      hash: md5
+      md5: 6a71fe2fb783e8e6758a53d417b75872
+      size: 22309
+    - path: data/raw/oil.csv
+      hash: md5
+      md5: 4767ef51a4ff57e65538afa9b1c5e1b5
+      size: 20580
+    - path: data/raw/train.csv
+      hash: md5
+      md5: b84434bf8eede5345ec04e41dfe9d86e
+      size: 121800373
+    - path: src/05_build_modeling_dataset.py
+      hash: md5
+      md5: c84b659f30ebd1a806736f7f43fbe350
+      size: 6320
+    outs:
+    - path: data/processed/tienda_familia_semana.parquet
+      hash: md5
+      md5: bd378eda10346d17b1278b6fb8c0a838
+      size: 1636256
+  split_temporal:
+    cmd: .venv\Scripts\python.exe src/06_temporal_split.py
+    deps:
+    - path: data/processed/tienda_familia_semana.parquet
+      hash: md5
+      md5: bd378eda10346d17b1278b6fb8c0a838
+      size: 1636256
+    - path: src/06_temporal_split.py
+      hash: md5
+      md5: 493391b801812316f61e0bdc3d4fe01e
+      size: 4177
+    outs:
+    - path: configs/split_config.json
+      hash: md5
+      md5: 5eed1a2aa0c80cbbdc09745ea1c62a71
+      size: 415
+    - path: data/processed/dataset_modelado.parquet
+      hash: md5
+      md5: 6ead3952b220ccd96219321d0de13f44
+      size: 1575259
+  feature_engineering:
+    cmd: .venv\Scripts\python.exe src/08_feature_engineering.py
+    deps:
+    - path: data/processed/dataset_modelado.parquet
+      hash: md5
+      md5: 6ead3952b220ccd96219321d0de13f44
+      size: 1575259
+    - path: src/08_feature_engineering.py
+      hash: md5
+      md5: 6ccd3636e918608d41dabafa871cb550
+      size: 8458
+    - path: src/calendario_semanal.py
+      hash: md5
+      md5: 4a7e367fddd9ba5558dcf31a30fca8a1
+      size: 2037
+    outs:
+    - path: configs/normalizacion.json
+      hash: md5
+      md5: 7b215f33455a76e3596a3b1b410ad07d
+      size: 876
+    - path: data/processed/dataset_features.parquet
+      hash: md5
+      md5: 79106653127ff204d1abbc47f29da423
+      size: 26241612

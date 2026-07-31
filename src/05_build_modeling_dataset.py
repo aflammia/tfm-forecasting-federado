@@ -8,6 +8,7 @@ tratamiento correcto de `transferred`) y una señal de "semana con día de pago"
 Salida: data/processed/tienda_familia_semana.parquet
 """
 from pathlib import Path
+
 import pandas as pd
 
 RAW = Path(__file__).resolve().parents[1] / "data" / "raw"

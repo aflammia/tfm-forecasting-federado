@@ -25,28 +25,22 @@ import json
 import sys
 from pathlib import Path
 
-import numpy as np
+import hydra
 import pandas as pd
+from omegaconf import DictConfig
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from modelo_mlp import ArquitecturaMLP, predecir
-from federado_flower import ejecutar_federado, cargar_mejor_ronda, MLPConEmbeddings
+from federado_flower import MLPConEmbeddings, cargar_mejor_ronda, ejecutar_federado
 from metrics import metricas_por_serie, resumen
+from modelo_mlp import ArquitecturaMLP, predecir
 
-PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
-REPORTS = Path(__file__).resolve().parents[1] / "reports"
-CONFIGS = Path(__file__).resolve().parents[1] / "configs"
-
-NUM_ROUNDS = 15  # calibrado empíricamente (Sesión 26): con 2 épocas locales/ronda, val_loss ya
-                 # convergía hacia la ronda 2-3 -- 15 da margen de sobra sin gastar cómputo extra
-EPOCAS_LOCALES_A_PROBAR = [1, 2, 3]
-PROXIMAL_MU = 0.01
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def cargar_arquitectura_ganadora() -> tuple[ArquitecturaMLP, float]:
+def cargar_arquitectura_ganadora(configs_dir: Path) -> tuple[ArquitecturaMLP, float]:
     """Lee configs/mlp_arquitectura.json (Etapa 1). Si no existe todavía, usa la arquitectura de
     fábrica (Sesión 5/22) -- para que el script siga siendo ejecutable de forma independiente."""
-    ruta = CONFIGS / "mlp_arquitectura.json"
+    ruta = configs_dir / "mlp_arquitectura.json"
     if not ruta.exists():
         print("Aviso: configs/mlp_arquitectura.json no existe -- usando arquitectura de fábrica.")
         return ArquitecturaMLP(), 1e-3
@@ -79,9 +73,17 @@ def evaluar_modelo(modelo: MLPConEmbeddings, features: pd.DataFrame, nombre: str
     return pd.DataFrame(filas_resumen)
 
 
-def main() -> None:
-    arq, lr = cargar_arquitectura_ganadora()
-    features = pd.read_parquet(PROCESSED / "dataset_features.parquet")
+@hydra.main(config_path="../conf", config_name="condicion_d", version_base=None)
+def main(cfg: DictConfig) -> None:
+    processed = ROOT / cfg.paths.processed
+    reports = ROOT / cfg.paths.reports
+    configs_dir = ROOT / cfg.paths.configs
+    num_rounds = cfg.num_rounds
+    epocas_locales_a_probar = list(cfg.epocas_locales_a_probar)
+    proximal_mu = cfg.proximal_mu
+
+    arq, lr = cargar_arquitectura_ganadora(configs_dir)
+    features = pd.read_parquet(processed / "dataset_features.parquet")
     train = features[features.split == "train"]
     val = features[features.split == "val"]
 
@@ -92,13 +94,13 @@ def main() -> None:
     resultados = []
     historiales = {}
 
-    for epocas_locales in EPOCAS_LOCALES_A_PROBAR:
+    for epocas_locales in epocas_locales_a_probar:
         nombre = f"D - FedAvg (epocas_locales={epocas_locales})"
         carpeta_id = f"fedavg_el{epocas_locales}"
-        print(f"\n{'=' * 60}\n{nombre} — {NUM_ROUNDS} rondas\n{'=' * 60}")
-        carpeta = PROCESSED / "checkpoints_federado" / carpeta_id
+        print(f"\n{'=' * 60}\n{nombre} — {num_rounds} rondas\n{'=' * 60}")
+        carpeta = processed / "checkpoints_federado" / carpeta_id
         hist = ejecutar_federado(
-            datos_por_silo, val, carpeta, estrategia="fedavg", num_rounds=NUM_ROUNDS,
+            datos_por_silo, val, carpeta, estrategia="fedavg", num_rounds=num_rounds,
             epocas_locales=epocas_locales, lr=lr, arq=arq,
         )
         modelo, mejor_ronda = cargar_mejor_ronda(carpeta, hist, arq=arq)
@@ -108,11 +110,11 @@ def main() -> None:
 
     nombre_fedprox = "D - FedProx (epocas_locales=2, control)"
     carpeta_id_fedprox = "fedprox_el2"
-    print(f"\n{'=' * 60}\n{nombre_fedprox} (mu={PROXIMAL_MU}) — {NUM_ROUNDS} rondas\n{'=' * 60}")
-    carpeta_fedprox = PROCESSED / "checkpoints_federado" / carpeta_id_fedprox
+    print(f"\n{'=' * 60}\n{nombre_fedprox} (mu={proximal_mu}) — {num_rounds} rondas\n{'=' * 60}")
+    carpeta_fedprox = processed / "checkpoints_federado" / carpeta_id_fedprox
     hist_fedprox = ejecutar_federado(
-        datos_por_silo, val, carpeta_fedprox, estrategia="fedprox", proximal_mu=PROXIMAL_MU,
-        num_rounds=NUM_ROUNDS, epocas_locales=2, lr=lr, arq=arq,
+        datos_por_silo, val, carpeta_fedprox, estrategia="fedprox", proximal_mu=proximal_mu,
+        num_rounds=num_rounds, epocas_locales=2, lr=lr, arq=arq,
     )
     modelo_fedprox, ronda_fedprox = cargar_mejor_ronda(carpeta_fedprox, hist_fedprox, arq=arq)
     print(f"Mejor ronda FedProx: {ronda_fedprox} (val_loss={hist_fedprox[ronda_fedprox]:.4f})")
@@ -120,8 +122,8 @@ def main() -> None:
     historiales[carpeta_id_fedprox] = hist_fedprox
 
     df_resumen = pd.concat(resultados, ignore_index=True)
-    REPORTS.mkdir(parents=True, exist_ok=True)
-    out = REPORTS / "resultados_condicion_D_federado.csv"
+    reports.mkdir(parents=True, exist_ok=True)
+    out = reports / "resultados_condicion_D_federado.csv"
     df_resumen.to_csv(out, index=False)
     print(f"\nGuardado: {out}")
     print(df_resumen.to_string(index=False))
@@ -134,7 +136,7 @@ def main() -> None:
     for nombre_run, hist in historiales.items():
         for ronda, perdida in hist.items():
             filas_hist.append({"config": nombre_run, "ronda": ronda, "val_loss": perdida})
-    pd.DataFrame(filas_hist).to_csv(REPORTS / "historial_rondas_condicion_D.csv", index=False)
+    pd.DataFrame(filas_hist).to_csv(reports / "historial_rondas_condicion_D.csv", index=False)
 
 
 if __name__ == "__main__":

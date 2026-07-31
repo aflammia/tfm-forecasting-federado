@@ -22,6 +22,13 @@ N_TIENDAS_ESPERADO = 54
 N_FAMILIAS_ESPERADO = 33
 SILOS_ESPERADOS = {"Grande": 9, "Mediano": 26, "Pequeno": 19}
 
+if not (PROCESSED / "dataset_features.parquet").exists():
+    pytest.skip(
+        "requiere data/processed/ (generado localmente desde el dataset de Kaggle) -- "
+        "no disponible en el runner de CI, solo en ejecución local",
+        allow_module_level=True,
+    )
+
 
 @pytest.fixture(scope="module")
 def stores():

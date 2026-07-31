@@ -1,0 +1,10 @@
+# Arquitectura/optimización de fábrica (Sesión 5/22) -- la que usan las condiciones A/B/C y el
+# candidato BASELINE de la búsqueda de la Etapa 1 (src/18_tuning_arquitectura.py). La arquitectura
+# GANADORA de esa búsqueda (Sesión 28) vive en configs/mlp_arquitectura.json, no aquí -- los
+# scripts de D/E (16/17) ya la cargan de ahí con su propio fallback a estos valores de fábrica.
+dim_emb: 8
+hidden1: 64
+hidden2: 32
+dropout: 0.2
+lr: 0.001
+batch_size: 256

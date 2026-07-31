@@ -49,8 +49,8 @@ import pandas as pd
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from metrics import metricas_por_serie, resumen
 from calendario_semanal import construir_calendario_completo
+from metrics import metricas_por_serie, resumen
 
 PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
 REPORTS = Path(__file__).resolve().parents[1] / "reports"

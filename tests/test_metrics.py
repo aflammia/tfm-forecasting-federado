@@ -10,8 +10,14 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from metrics import wmape, mase, rmsse, metricas_por_serie, comparar_condiciones, porcentaje_brecha_recuperada
-
+from metrics import (
+    comparar_condiciones,
+    mase,
+    metricas_por_serie,
+    porcentaje_brecha_recuperada,
+    rmsse,
+    wmape,
+)
 
 # ============================================================ WMAPE
 

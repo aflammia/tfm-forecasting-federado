@@ -11,6 +11,7 @@ Salida: data/processed/dataset_modelado.parquet (+ configs/split_config.json)
 """
 import json
 from pathlib import Path
+
 import pandas as pd
 
 PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"

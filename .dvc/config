@@ -1,0 +1,5 @@
+[core]
+    analytics = false
+    remote = local_storage
+['remote "local_storage"']
+    url = C:/Users/alefl/OneDrive/Escritorio/dvc-storage-tfm

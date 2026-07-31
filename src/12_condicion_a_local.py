@@ -15,17 +15,18 @@ está diseñado para demostrar que se puede mitigar.
 import sys
 from pathlib import Path
 
+import hydra
 import pandas as pd
+from omegaconf import DictConfig
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from modelo_mlp import entrenar, predecir
 from metrics import metricas_por_serie, resumen
+from modelo_mlp import ArquitecturaMLP, entrenar, predecir
 
-PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
-REPORTS = Path(__file__).resolve().parents[1] / "reports"
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def entrenar_locales(features: pd.DataFrame) -> pd.DataFrame:
+def entrenar_locales(features: pd.DataFrame, arq: ArquitecturaMLP, lr: float) -> pd.DataFrame:
     """Entrena un MLP independiente por tienda y devuelve las predicciones de val+test."""
     filas = []
     tiendas = sorted(features["store_nbr"].unique())
@@ -39,7 +40,7 @@ def entrenar_locales(features: pd.DataFrame) -> pd.DataFrame:
             continue
 
         if len(val) >= 10:
-            modelo, hist = entrenar(train, val)
+            modelo, hist = entrenar(train, val, arq=arq, lr=lr)
         else:
             # sin val propio (p.ej. tienda 52, apertura tardía -- Sesión 16): se reserva una
             # porción final de train como val interno solo para decidir el early stopping.
@@ -47,7 +48,7 @@ def entrenar_locales(features: pd.DataFrame) -> pd.DataFrame:
             train_int, val_int = train.iloc[:corte], train.iloc[corte:]
             if len(val_int) < 5:
                 val_int = train_int
-            modelo, hist = entrenar(train_int, val_int)
+            modelo, hist = entrenar(train_int, val_int, arq=arq, lr=lr)
 
         pred = predecir(modelo, eval_)
         fila = eval_[["store_nbr", "family", "week_start", "split"]].copy()
@@ -61,9 +62,15 @@ def entrenar_locales(features: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(filas, ignore_index=True)
 
 
-def main() -> None:
-    features = pd.read_parquet(PROCESSED / "dataset_features.parquet")
-    predicciones = entrenar_locales(features)
+@hydra.main(config_path="../conf", config_name="config", version_base=None)
+def main(cfg: DictConfig) -> None:
+    processed = ROOT / cfg.paths.processed
+    reports = ROOT / cfg.paths.reports
+    arq = ArquitecturaMLP(dim_emb=cfg.modelo.dim_emb, hidden1=cfg.modelo.hidden1,
+                           hidden2=cfg.modelo.hidden2, dropout=cfg.modelo.dropout)
+
+    features = pd.read_parquet(processed / "dataset_features.parquet")
+    predicciones = entrenar_locales(features, arq=arq, lr=cfg.modelo.lr)
 
     df_train_ref = features[features.split == "train"][["store_nbr", "family", "ventas"]]
     filas_resumen = []
@@ -86,8 +93,8 @@ def main() -> None:
         filas_resumen.append(fila)
 
     df_resumen = pd.DataFrame(filas_resumen)
-    REPORTS.mkdir(parents=True, exist_ok=True)
-    out = REPORTS / "resultados_condicion_A_local.csv"
+    reports.mkdir(parents=True, exist_ok=True)
+    out = reports / "resultados_condicion_A_local.csv"
     df_resumen.to_csv(out, index=False)
     print(f"\nGuardado: {out}")
     print(df_resumen.to_string(index=False))

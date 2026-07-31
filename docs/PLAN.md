@@ -167,9 +167,26 @@ disponibles (Sesiones 26-27) sostienen la respuesta a RQ1.
   requeriría recalcular métricas por serie para A/B/C, no guardadas en su momento.)*
 
 ### FASE 4 — MLOps de producción
-- **Config:** Hydra. **Tracking:** W&B. **Versionado datos:** DVC.
-- **CI/CD:** GitHub Actions (ruff + mypy + pytest en cada push). **Contenedor:** Docker + devcontainer.
-- **Registro de modelos:** Azure ML (keyword de CV). **Dashboard:** Streamlit desplegado (elige silo → ve previsión y comparación).
+✅ **Cerrada, excepto Azure ML (2026-07-31, Sesión 29).**
+- **CI/CD** ✅ GitHub Actions (`.github/workflows/ci.yml`): ruff + mypy (informativo) + pytest en
+  cada push. Los tests que dependen de `data/processed/` real (gitignored) se saltan solos en el
+  runner. mypy encontró 3 discrepancias reales de tipo/documentación en `modelo_mlp.py` y
+  `federado_flower.py`, corregidas.
+- **Contenedor** ✅ `Dockerfile` + `.devcontainer/devcontainer.json`. Build verificado con éxito;
+  la verificación en ejecución (`docker run`) quedó pendiente por caída del daemon local.
+- **Dashboard** ✅ `dashboard/app.py` (Streamlit) -- comparación de métodos, convergencia
+  federada por ronda, detalle por serie de la Condición E. Lee `reports/*.csv` ya generados, no
+  reentrena nada.
+- **Versionado de datos** ✅ DVC (`dvc.yaml`, 5 etapas: descarga → silos → dataset → split →
+  features), remoto local por ahora (repuntable a Azure Blob sin cambios). `dvc repro` verificado
+  de extremo a extremo: reproduce cifras idénticas a las documentadas en Sesiones 11-19.
+- **Config** ✅ Hydra, alcance acotado a los scripts que de verdad se benefician (12/13/14 —
+  condiciones A/B/C —, 18 — búsqueda de arquitectura —, 16 — Condición D). 17 y 19 (Condición E,
+  Duan) se dejan deliberadamente sin Hydra por su acoplamiento cruzado (`importlib`) y su propio
+  mecanismo de config ya existente (`configs/mlp_arquitectura.json`). Ver Sesión 29 para el
+  razonamiento completo.
+- **Registro de modelos: Azure ML** ⏳ pendiente -- bloqueado por la cuenta de Azure for Students
+  del autor (no bloquea el resto de la Fase 4, ver `STATE.md`).
 
 ### FASE 4b — Capítulos de negocio (RQ3, RQ4) — análisis y escritura, sin entrenar nada
 - **T4b.1** — **FL vs. Data Clean Rooms.** Comparación estructurada (tarea que resuelven, movimiento de

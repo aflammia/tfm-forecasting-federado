@@ -1,0 +1,8 @@
+# Subrutas dentro del repo (los scripts las resuelven de forma absoluta con
+# Path(__file__).resolve().parents[1] / <valor>, no relativas al cwd de Hydra -- así el
+# comportamiento no cambia sin importar desde dónde se invoque el script).
+raw: data/raw
+processed: data/processed
+reports: reports
+configs: configs
+checkpoints_federado: data/processed/checkpoints_federado

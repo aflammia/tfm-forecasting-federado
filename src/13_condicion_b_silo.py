@@ -13,17 +13,18 @@ datos crudos entre ellos.
 import sys
 from pathlib import Path
 
+import hydra
 import pandas as pd
+from omegaconf import DictConfig
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from modelo_mlp import entrenar, predecir
 from metrics import metricas_por_serie, resumen
+from modelo_mlp import ArquitecturaMLP, entrenar, predecir
 
-PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
-REPORTS = Path(__file__).resolve().parents[1] / "reports"
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def entrenar_por_silo(features: pd.DataFrame) -> pd.DataFrame:
+def entrenar_por_silo(features: pd.DataFrame, arq: ArquitecturaMLP, lr: float) -> pd.DataFrame:
     filas = []
     silos = sorted(features["silo"].unique())
     print(f"Entrenando MLP centralizado para {len(silos)} silos...")
@@ -34,7 +35,7 @@ def entrenar_por_silo(features: pd.DataFrame) -> pd.DataFrame:
         eval_ = d[d.split.isin(["val", "test"])]
         print(f"  Silo {silo}: {d['store_nbr'].nunique()} tiendas, {len(train)} filas de train, {len(val)} de val")
 
-        modelo, hist = entrenar(train, val)
+        modelo, hist = entrenar(train, val, arq=arq, lr=lr)
         pred = predecir(modelo, eval_)
         fila = eval_[["store_nbr", "family", "week_start", "split"]].copy()
         fila["pred_silo"] = pred
@@ -44,9 +45,15 @@ def entrenar_por_silo(features: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(filas, ignore_index=True)
 
 
-def main() -> None:
-    features = pd.read_parquet(PROCESSED / "dataset_features.parquet")
-    predicciones = entrenar_por_silo(features)
+@hydra.main(config_path="../conf", config_name="config", version_base=None)
+def main(cfg: DictConfig) -> None:
+    processed = ROOT / cfg.paths.processed
+    reports = ROOT / cfg.paths.reports
+    arq = ArquitecturaMLP(dim_emb=cfg.modelo.dim_emb, hidden1=cfg.modelo.hidden1,
+                           hidden2=cfg.modelo.hidden2, dropout=cfg.modelo.dropout)
+
+    features = pd.read_parquet(processed / "dataset_features.parquet")
+    predicciones = entrenar_por_silo(features, arq=arq, lr=cfg.modelo.lr)
 
     df_train_ref = features[features.split == "train"][["store_nbr", "family", "ventas"]]
     filas_resumen = []
@@ -69,8 +76,8 @@ def main() -> None:
         filas_resumen.append(fila)
 
     df_resumen = pd.DataFrame(filas_resumen)
-    REPORTS.mkdir(parents=True, exist_ok=True)
-    out = REPORTS / "resultados_condicion_B_silo.csv"
+    reports.mkdir(parents=True, exist_ok=True)
+    out = reports / "resultados_condicion_B_silo.csv"
     df_resumen.to_csv(out, index=False)
     print(f"\nGuardado: {out}")
     print(df_resumen.to_string(index=False))

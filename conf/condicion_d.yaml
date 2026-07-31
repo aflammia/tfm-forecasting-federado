@@ -1,0 +1,16 @@
+defaults:
+  - paths: default
+  - _self_
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false
+
+# calibrado empíricamente (Sesión 26): con 2 épocas locales/ronda, val_loss ya convergía hacia
+# la ronda 2-3 -- 15 da margen de sobra sin gastar cómputo extra.
+num_rounds: 15
+epocas_locales_a_probar: [1, 2, 3]
+proximal_mu: 0.01

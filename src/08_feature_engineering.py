@@ -26,8 +26,9 @@ silenciosamente los lags de las semanas siguientes (p.ej. lag_log_1 pasaba a ser
 la venta de 2 semanas atras). Ver Sesion 19 del RESEARCH_LOG para el diagnostico completo.
 """
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 

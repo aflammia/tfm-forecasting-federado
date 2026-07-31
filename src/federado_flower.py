@@ -28,14 +28,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-from torch import nn
-from torch.utils.data import DataLoader
-
 from flwr.client import ClientApp, NumPyClient
 from flwr.common import Context, ndarrays_to_parameters
 from flwr.server import ServerApp, ServerConfig
 from flwr.server.strategy import FedAvg, FedProx
 from flwr.simulation import run_simulation
+from torch import nn
+from torch.utils.data import DataLoader
 
 from modelo_mlp import ArquitecturaMLP, DatasetVentas, MLPConEmbeddings
 
@@ -110,7 +109,7 @@ def _hacer_client_fn(datos_por_silo: dict[str, pd.DataFrame], epocas_locales: in
     silos = sorted(datos_por_silo.keys())
 
     def client_fn(context: Context):
-        idx = context.node_config["partition-id"]
+        idx = int(context.node_config["partition-id"])
         silo = silos[idx]
         return ClienteSilo(silo, datos_por_silo[silo], epocas_locales=epocas_locales,
                             lr=lr, arq=arq).to_client()
@@ -200,7 +199,7 @@ def ejecutar_federado(
 
 
 def cargar_mejor_ronda(checkpoints_dir: Path, historial_perdidas: dict[int, float],
-                        arq: ArquitecturaMLP = ArquitecturaMLP()) -> MLPConEmbeddings:
+                        arq: ArquitecturaMLP = ArquitecturaMLP()) -> tuple[MLPConEmbeddings, int]:
     mejor_ronda = min(historial_perdidas, key=historial_perdidas.get)
     datos = np.load(checkpoints_dir / f"ronda_{mejor_ronda}.npz")
     parametros = [datos[k] for k in datos.files]

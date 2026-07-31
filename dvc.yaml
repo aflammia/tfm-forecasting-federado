@@ -1,0 +1,47 @@
+stages:
+  descargar_datos:
+    cmd: .venv\Scripts\python.exe src/00_download_data.py
+    deps:
+      - src/00_download_data.py
+    outs:
+      - data/raw
+
+  generar_silos:
+    cmd: .venv\Scripts\python.exe src/04_generate_silos.py
+    deps:
+      - src/04_generate_silos.py
+      - data/raw/stores.csv
+    outs:
+      - data/processed/stores_silos.csv
+
+  construir_dataset:
+    cmd: .venv\Scripts\python.exe src/05_build_modeling_dataset.py
+    deps:
+      - src/05_build_modeling_dataset.py
+      - data/raw/train.csv
+      - data/raw/oil.csv
+      - data/raw/holidays_events.csv
+      - data/processed/stores_silos.csv
+    outs:
+      - data/processed/tienda_familia_semana.parquet
+
+  split_temporal:
+    cmd: .venv\Scripts\python.exe src/06_temporal_split.py
+    deps:
+      - src/06_temporal_split.py
+      - data/processed/tienda_familia_semana.parquet
+    outs:
+      - data/processed/dataset_modelado.parquet
+      - configs/split_config.json:
+          cache: false
+
+  feature_engineering:
+    cmd: .venv\Scripts\python.exe src/08_feature_engineering.py
+    deps:
+      - src/08_feature_engineering.py
+      - src/calendario_semanal.py
+      - data/processed/dataset_modelado.parquet
+    outs:
+      - data/processed/dataset_features.parquet
+      - configs/normalizacion.json:
+          cache: false

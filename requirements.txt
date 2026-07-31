@@ -28,3 +28,12 @@ jupyter_client>=8.6
 
 # Testing
 pytest>=8.0
+
+# Desarrollo / CI (Fase 4)
+ruff>=0.16
+mypy==1.14.1  # pin: mypy>=2 exige pathspec>=1.0, incompatible con el pin de flwr (pathspec<0.13)
+
+# MLOps (Fase 4)
+streamlit>=1.38
+dvc>=3.55
+hydra-core>=1.3

@@ -30,9 +30,9 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from modelo_mlp import ArquitecturaMLP, entrenar, predecir, MLPConEmbeddings
 from federado_flower import set_params
 from metrics import metricas_por_serie, resumen
+from modelo_mlp import ArquitecturaMLP, MLPConEmbeddings, entrenar, predecir
 
 PROCESSED = Path(__file__).resolve().parents[1] / "data" / "processed"
 REPORTS = Path(__file__).resolve().parents[1] / "reports"

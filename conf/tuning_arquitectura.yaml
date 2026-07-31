@@ -1,0 +1,29 @@
+defaults:
+  - paths: default
+  - _self_
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false
+
+n_candidatos: 12
+semilla: 42
+
+# El primer candidato evaluado es siempre BASELINE (arquitectura de fábrica, conf/modelo/mlp.yaml)
+# -- da la comparación limpia "antes/después" frente a la búsqueda aleatoria.
+baseline:
+  lr: 0.001
+  dropout: 0.2
+  hidden1: 64
+  dim_emb: 8
+  batch_size: 256
+
+espacio_busqueda:
+  lr: [0.0005, 0.001, 0.002]
+  dropout: [0.1, 0.2, 0.3]
+  hidden1: [64, 96, 128]
+  dim_emb: [8, 16]
+  batch_size: [128, 256]

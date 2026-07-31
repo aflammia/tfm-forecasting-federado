@@ -20,7 +20,6 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-
 # ============================================================ métricas base (arrays 1D)
 
 def wmape(y_true: np.ndarray, y_pred: np.ndarray) -> float:

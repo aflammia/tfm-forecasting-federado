@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      # El repo no está anotado con tipos a fondo (proyecto de investigación, no librería
+      # publicada). mypy corre y reporta para detectar errores reales sin bloquear el CI por
+      # los falsos positivos habituales de los stubs de numpy/pandas/matplotlib/pytorch en
+      # código sin anotar -- ver docs/RESEARCH_LOG.md, Sesión 29.
+      - name: Type check (mypy, informativo)
+        run: mypy src/
+        continue-on-error: true
+
+      # data/raw y data/processed están gitignored (se generan localmente desde el dataset de
+      # Kaggle, no viven en el repo) -- los tests que dependen de esos ficheros se saltan solos
+      # (pytest.skip) cuando no los encuentran, así que esto corre limpio sin datos.
+      - name: Tests (pytest)
+        run: pytest tests/ -v

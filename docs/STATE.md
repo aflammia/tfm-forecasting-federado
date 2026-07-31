@@ -1,10 +1,11 @@
 # STATE.md — Estado actual y próxima tarea
 
 > Documento vivo. **Actualízalo al completar cada tarea** (marca hecho, anota lo aprendido).
-> Última actualización: 2026-07-30 — **FASE 1, FASE 2 y FASE 3 (core) completas + tuning de D/E
-> cerrado.** T1.1-T1.5 (+ corrección Sesión 19); T2.1-T2.5; T3.1-T3.3 (Flower, Condición D
-> FedAvg/FedProx, Condición E personalización); Sesión 28 (tuning de arquitectura, épocas locales,
-> personalización y corrección de Duan). **Resultado central del TFM (RQ1) sigue siendo la
+> Última actualización: 2026-07-31 — **FASE 1, FASE 2, FASE 3 (core) y FASE 4 (MLOps, salvo Azure
+> ML) completas**, más el tuning de D/E. T1.1-T1.5 (+ corrección Sesión 19); T2.1-T2.5; T3.1-T3.3
+> (Flower, Condición D FedAvg/FedProx, Condición E personalización); Sesión 28 (tuning de
+> arquitectura, épocas locales, personalización y corrección de Duan); Sesión 29 (CI, Docker,
+> dashboard Streamlit, DVC, Hydra — ver más abajo). **Resultado central del TFM (RQ1) sigue siendo la
 > configuración de la Sesión 27: E (federado + personalización) — WMAPE test mediana 0,1379
 > (regenerado y confirmado en la Sesión 28) — supera a A (local), B y C (centralizado) y D
 > (federado sin personalizar)**, y empata con el 2º mejor método del proyecto (media móvil,
@@ -58,28 +59,31 @@
 - [x] **T3.1-T3.2 cerradas (2026-07-22)**: `src/federado_flower.py` — Flower (`flwr[simulation]` 1.32.1, backend Ray) montado; los 3 silos son los clientes, checkpointing manual por ronda (evaluación centralizada), soporte FedAvg y FedProx. **Bug encontrado y corregido:** `get_params()` compartía memoria con los pesos en vivo del modelo (`.numpy()` sobre CPU es zero-copy) — detectado por los tests, no afectó a la simulación real (la serialización entre procesos de Ray rompe el alias como efecto secundario). Condición D: FedAvg gana a FedProx (μ=0,01 sin tunear) — WMAPE test mediana 0,1507 vs 0,1681. **D ya bate a B (0,168) y C (0,174)** sin compartir datos crudos. 5 tests nuevos. Ver RESEARCH_LOG Sesión 26.
 - [x] **T3.3 cerrada (2026-07-22)**: `src/17_condicion_e_personalizacion.py` — fine-tuning por tienda desde los pesos de D (FedAvg). **WMAPE test mediana 0,1396 — supera a A, B, C y D**, la mejor de las 5 condiciones del proyecto y 3ª mejor de los 11 métodos comparados (solo por detrás de LightGBM 0,132 y media móvil 0,138). La métrica de brecha recuperada da un % negativo mecánicamente (su premisa de que Centralizado es el techo no se cumple aquí) — la lectura correcta es que E bate en absoluto a local y a centralizado. `entrenar()` ganó el parámetro `modelo_inicial` para continuar desde pesos dados. 1 test nuevo (56/56 en total). Ver RESEARCH_LOG Sesión 27. **Fase 3 (core) completa.**
 - [x] **Tuning de D/E cerrado (2026-07-30)**: `ArquitecturaMLP` (dataclass) hace configurable la arquitectura del MLP en todo el pipeline (`modelo_mlp.py`, `federado_flower.py`); `src/18_tuning_arquitectura.py` (búsqueda aleatoria, 13 candidatos) encuentra una arquitectura mejor para el proxy agrupado (WMAPE val 0,1880→0,1093); `src/16_condicion_d_federado.py` confirma la mejora en D real (test 0,1507→0,1402 con FedProx epocas_locales=2); `src/17_condicion_e_personalizacion.py` prueba 3 variantes de personalización (fine-tuning completo/lr bajo/estilo FedPer con `congelar_base`) — **ninguna supera al resultado original** (0,1446 la mejor nueva vs. 0,1379 el original regenerado); `src/correccion_sesgo.py`+`src/19_correccion_duan.py` prueban la corrección de Duan (1983) — **catastrófica** (0,1446→0,8876) por sensibilidad a atípicos con pocas filas por tienda, descartada. **Se mantiene la configuración de la Sesión 27 como el mejor resultado federado del proyecto.** 26 tests nuevos (89/89 en total). Ver RESEARCH_LOG Sesión 28.
+- [x] **Fase 4 (MLOps) cerrada, excepto Azure ML (2026-07-31)**: CI (`.github/workflows/ci.yml`: ruff+mypy informativo+pytest, con guard para saltar tests que dependen de datos reales); Docker (`Dockerfile`+`.devcontainer/`, build verificado, ejecución pendiente por caída del daemon local); dashboard Streamlit (`dashboard/app.py`, 3 pestañas, lee `reports/*.csv` ya generados); DVC (`dvc.yaml`, 5 etapas, remoto **local** en `../dvc-storage-tfm/` fuera del repo — funciona solo en esta máquina, repuntable a Azure Blob más adelante; `dvc repro` verificado de extremo a extremo, reproduce cifras idénticas a las de las Sesiones 11-19); Hydra (`conf/`, alcance acotado a los scripts 12/13/14/16/18 — A/B/C, tuning, D — que de verdad se benefician; 17/19 quedan sin Hydra por su acoplamiento cruzado ya existente, decisión justificada en RESEARCH_LOG). mypy encontró y corrigió 3 discrepancias reales de tipo en `modelo_mlp.py`/`federado_flower.py`. 72/72 tests pasan. Ver RESEARCH_LOG Sesión 29.
 
-## ▶️ PRÓXIMA TAREA — extensiones opcionales, o Fase 4 (MLOps)
+## ▶️ PRÓXIMA TAREA — extensiones opcionales, Fase 4b, o Azure ML
 
-**Fases 1, 2 y 3 (core, T3.1-T3.3) completas, más el tuning de D/E (Sesión 28, resultado honesto: no supera al original).**
+**Fases 1-4 completas** (Fase 4 sin Azure ML, pendiente de cuenta) **+ tuning de D/E (Sesión 28).**
 - `reports/resultados_condicion_D_federado.csv`, `reports/resultados_condicion_E_personalizacion.csv`
   — resultados del federado. `reports/historial_rondas_condicion_D.csv` — convergencia por ronda.
 - `data/processed/checkpoints_federado/{fedavg,fedprox}/` — pesos de cada ronda (gitignored,
   reproducibles con `src/16_condicion_d_federado.py`).
-- `src/federado_flower.py`, `src/modelo_mlp.py` (ahora con `modelo_inicial`) — infraestructura
-  lista para T3.4 (stragglers) si se retoma.
+- `dashboard/app.py` (`streamlit run dashboard/app.py`) — panel de resultados ya navegable.
+- `dvc repro` reproduce todo el pipeline de datos de extremo a extremo; `dvc push`/`dvc pull`
+  contra el remoto local solo funcionan en esta máquina (no hay cuenta cloud configurada aún).
 
 **Opciones para continuar (ninguna bloquea la otra):**
 1. **T3.4** (muestreo de clientes/stragglers) y **T3.5** (Wilcoxon formal completo A-E) — extensiones,
    no esenciales: las tablas comparativas ya disponibles sostienen la respuesta a RQ1.
-2. **Fase 4** (MLOps): Azure ML (registro de modelos), dashboard Streamlit, CI/CD, Docker.
+2. **Azure ML** (registro de modelos) — en cuanto exista la cuenta de Azure for Students.
 3. **Fase 4b** (capítulos de negocio, RQ3/RQ4): FL vs. data clean rooms, cuantificación de valor
    en €. Es solo análisis/escritura, no requiere entrenar nada más.
 
 ## ⏳ Pendiente de decisión / acción del usuario
 
 - **Regenerar el token de Kaggle** (se pegó en un chat; higiene). Al hacerlo, actualizar `C:\Users\alefl\.kaggle\access_token`.
-- **Cuenta de Azure for Students** (verificar con correo UNAV) — necesaria para la Fase 4 (Azure ML). No bloquea las Fases 1-3.
+- **Cuenta de Azure for Students** (verificar con correo UNAV) — necesaria para Azure ML (registro de modelos), la única pieza de la Fase 4 aún sin cerrar.
+- **Docker Desktop** — confirmar que el daemon local está activo para verificar `docker run` (el build ya se verificó con éxito en la Sesión 29).
 - **Cuenta de Weights & Biases** (gratuita, [wandb.ai](https://wandb.ai)) — al crearla, ejecutar
   `wandb login` y luego `wandb sync wandb/<carpeta>` para subir la corrida ya registrada en local.
   No bloquea la Fase 3 (funciona en modo offline mientras tanto).

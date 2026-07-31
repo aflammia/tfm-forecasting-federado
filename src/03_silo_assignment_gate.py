@@ -8,6 +8,7 @@ Este script SOLO IMPRIME una propuesta — no escribe data/processed/stores_silo
 Ese fichero se genera en un paso aparte, tras la confirmación explícita del autor.
 """
 from pathlib import Path
+
 import pandas as pd
 
 RAW = Path(__file__).resolve().parents[1] / "data" / "raw"

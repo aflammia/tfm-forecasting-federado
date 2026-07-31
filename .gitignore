@@ -1,6 +1,7 @@
 # --- Credenciales y secretos (NUNCA subir) ---
 *.json
 !configs/*.json
+!.devcontainer/devcontainer.json
 kaggle.json
 access_token
 .env
@@ -28,6 +29,7 @@ outputs/
 *.ckpt
 *.pt
 *.pth
+*.log
 
 # --- Sistema ---
 .DS_Store

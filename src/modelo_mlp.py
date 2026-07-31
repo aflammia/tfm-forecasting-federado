@@ -12,9 +12,9 @@ Pérdida Huber sobre log(1+ventas) (robusta al pico del terremoto de abril 2016,
 Optimizador Adam. 4.985 parámetros (recuento exacto verificado, no la estimación aproximada
 original de la Sesión 5).
 """
-from dataclasses import dataclass
 import copy
-from typing import Optional
+from dataclasses import dataclass
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -149,7 +149,7 @@ def entrenar(
     dl_val = DataLoader(DatasetVentas(val_df), batch_size=1024, shuffle=False)
 
     mejor_val, mejor_estado, sin_mejora = np.inf, None, 0
-    historial = {"train_loss": [], "val_loss": []}
+    historial: dict[str, Any] = {"train_loss": [], "val_loss": []}
     epoca = 0
 
     for epoca in range(epochs):
@@ -158,10 +158,10 @@ def entrenar(
         for x_cont, fam, tienda, y in dl_train:
             opt.zero_grad()
             pred = modelo(x_cont, fam, tienda)
-            l = perdida_fn(pred, y)
-            l.backward()
+            perdida = perdida_fn(pred, y)
+            perdida.backward()
             opt.step()
-            perdida_epoca += l.item() * len(y)
+            perdida_epoca += perdida.item() * len(y)
         perdida_epoca /= len(dl_train.dataset)
 
         modelo.eval()

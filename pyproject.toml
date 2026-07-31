@@ -1,0 +1,26 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# notebooks/ son material de apoyo (repasos ejecutados manualmente, no resultado de
+# investigación) -- no forman parte del pipeline reproducible que el CI protege.
+exclude = ["notebooks"]
+
+[tool.ruff.lint]
+# E501 (línea larga) queda fuera: hay comentarios/docstrings en español que la superan y no
+# aporta corregirlo en scripts ya cerrados y documentados en RESEARCH_LOG. E701/E702/E712/E731/
+# F841 quedan fuera por el mismo motivo: son solo estilo (punto y coma, `== True`, lambdas) en
+# scripts de EDA/figuras de las Fases 1-2, ya verificados -- tocarlos ahora es riesgo sin beneficio
+# real. E/F/I sí se aplican: detectan errores reales (imports sin usar, nombres no definidos) y
+# mantienen el orden de imports.
+select = ["E", "F", "I"]
+ignore = ["E501", "E701", "E702", "E712", "E731", "F841"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+# Sin anotaciones de tipo en el código existente (proyecto de investigación, no librería
+# publicada) -- modo permisivo: solo señala errores reales (llamadas con tipos incompatibles,
+# atributos inexistentes), no exige anotar cada función. Re-tipar el código a fondo queda fuera
+# de alcance de la Fase 4 ("no sobre-ingeniería").
+check_untyped_defs = false
+disable_error_code = ["annotation-unchecked"]

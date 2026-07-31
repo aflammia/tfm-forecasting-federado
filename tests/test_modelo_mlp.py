@@ -14,8 +14,14 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from modelo_mlp import (
-    ArquitecturaMLP, DatasetVentas, FEATURES_CONTINUAS, MLPConEmbeddings, N_FAMILIAS, N_TIENDAS,
-    entrenar, predecir,
+    FEATURES_CONTINUAS,
+    N_FAMILIAS,
+    N_TIENDAS,
+    ArquitecturaMLP,
+    DatasetVentas,
+    MLPConEmbeddings,
+    entrenar,
+    predecir,
 )
 
 
@@ -136,7 +142,7 @@ def test_entrenar_llama_a_wandb_run_log_por_cada_epoca():
     falso_run = _FalsoWandbRun()
     modelo, hist = entrenar(train_df, val_df, epochs=8, paciencia=8, semilla=42, wandb_run=falso_run)
     assert len(falso_run.llamadas) == hist["epocas_entrenadas"]
-    assert all({"train_loss", "val_loss", "epoca"} <= set(l.keys()) for l in falso_run.llamadas)
+    assert all({"train_loss", "val_loss", "epoca"} <= set(reg.keys()) for reg in falso_run.llamadas)
 
 
 def test_entrenar_sin_wandb_run_no_falla():

@@ -11,12 +11,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pytest
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from modelo_mlp import ArquitecturaMLP, FEATURES_CONTINUAS, N_FAMILIAS, N_TIENDAS, MLPConEmbeddings
-from federado_flower import ClienteSilo, get_params, set_params, cargar_mejor_ronda
+from federado_flower import ClienteSilo, cargar_mejor_ronda, get_params, set_params
+from modelo_mlp import FEATURES_CONTINUAS, N_FAMILIAS, N_TIENDAS, ArquitecturaMLP, MLPConEmbeddings
 
 
 def _df_sintetico(n: int, semilla: int = 0) -> pd.DataFrame:

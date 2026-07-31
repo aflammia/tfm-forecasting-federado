@@ -1,0 +1,16 @@
+{
+  "name": "tfm-forecasting-federado",
+  "build": {
+    "context": "..",
+    "dockerfile": "../Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "charliermarsh.ruff"]
+    }
+  },
+  "remoteEnv": {
+    "PYTHONIOENCODING": "utf-8"
+  },
+  "postCreateCommand": "echo 'Entorno listo. Faltan datos: ejecuta src/00_download_data.py con KAGGLE_API_TOKEN configurado (ver CLAUDE.md, sección Nube).'"
+}
