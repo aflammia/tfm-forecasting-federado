@@ -185,8 +185,25 @@ disponibles (Sesiones 26-27) sostienen la respuesta a RQ1.
   Duan) se dejan deliberadamente sin Hydra por su acoplamiento cruzado (`importlib`) y su propio
   mecanismo de config ya existente (`configs/mlp_arquitectura.json`). Ver Sesión 29 para el
   razonamiento completo.
-- **Registro de modelos: Azure ML** ⏳ pendiente -- bloqueado por la cuenta de Azure for Students
-  del autor (no bloquea el resto de la Fase 4, ver `STATE.md`).
+- **Registro de modelos: Azure ML** 🔧 código listo, ejecución pendiente del autor -- se cierra
+  como parte del simulacro federado en Azure (Sesión 30), que registra el modelo global real en el
+  workspace `ws-tfm-federado` (`infra/06_registrar_modelo.py`).
+
+### FASE 4 (extensión) — Simulacro federado REAL en Azure
+🔧 **Código listo y verificado en local; ejecución en Azure pendiente del autor (2026-08-04, Sesión 30).**
+Del Simulation Engine (un proceso) al **Deployment Engine** de Flower: 3 VMs (una por silo, cada
+una con solo sus datos) + 1 coordinador neutral, entrenando por gRPC, con dashboard en vivo en
+Azure ML Studio (MLflow) y registro del modelo global.
+- **Flower App de despliegue** ✅ `flower_app/` -- reutiliza `ClienteSilo`/`MLPConEmbeddings` de
+  `src/` sin tocarlos. Equivalencia con la simulación documentada **verificada** (`val_loss` por
+  ronda idéntico a fedavg_el2) vía `run_simulation`, antes de gastar en Azure.
+- **Infra scriptada** ✅ `infra/` (11 scripts `az`/bash/python, sintaxis validada): provisión
+  idempotente, reparto de datos aislado, arranque de la federación, corrida, registro, y control
+  de coste (`auto-shutdown` + `deallocate.sh` + `destroy.sh`).
+- **Coste** ✅ estimado ~$2-6 para todo el ejercicio (VMs serie B CPU) -- cabe de sobra en el
+  crédito de estudiante de $100.
+- **Ejecución en Azure (pasos 3-9)** ⏳ requiere `az login` del autor + Azure CLI instalado --
+  runbook completo en `infra/README.md`.
 
 ### FASE 4b — Capítulos de negocio (RQ3, RQ4) — análisis y escritura, sin entrenar nada
 - **T4b.1** — **FL vs. Data Clean Rooms.** Comparación estructurada (tarea que resuelven, movimiento de

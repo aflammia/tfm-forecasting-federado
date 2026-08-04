@@ -1,0 +1,5 @@
+# Los scripts de shell y el cloud-init se ejecutan en Git Bash (Windows) y en las VMs Linux del
+# simulacro (Sesión 30). Con finales de línea CRLF fallan (`$'\r': command not found`, cloud-init
+# roto), así que se fuerzan a LF siempre, independientemente del autocrlf de la máquina.
+*.sh text eol=lf
+infra/cloud-init.yaml text eol=lf

@@ -2095,6 +2095,100 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/14_condicion_c_global.py m
 
 ---
 
+## Sesión 30 — Simulacro federado REAL en Azure: de simulación a 3 VMs distribuidas
+
+**Fecha:** 2026-08-04
+**Archivos nuevos:** `flower_app/` (Flower App de despliegue: `pyproject.toml`,
+`requirements.txt`, `tfm_fl/{task,client_app,server_app}.py`), `infra/` (`config.sh`,
+`cloud-init.yaml`, `01_provision.sh`, `02_split_datos.py`, `03_deploy.sh`,
+`04_start_federation.sh`, `05_run.sh`, `06_registrar_modelo.py`,
+`verificar_equivalencia_local.py`, `deallocate.sh`, `destroy.sh`, `README.md`)
+**Archivos modificados:** `pyproject.toml` (excluir `flower_app` del linter), `.gitignore`
+**Objetivo:** hasta ahora todo el federado del TFM corría en **simulación** (un solo proceso,
+Ray, los 3 silos como particiones en memoria — `src/federado_flower.py`). El autor pidió un
+**simulacro de vida real** en Azure: 3 VMs de verdad, una por silo, cada una con SOLO sus datos,
+entrenando de forma federada por red, con dashboard en vivo. Exige pasar del **Simulation Engine**
+al **Deployment Engine** de Flower (SuperLink + SuperNodes por gRPC). Se planificó con Opus y se
+ejecutó con Sonnet.
+
+### Principio rector: refactor ADITIVO, no destructivo
+
+`src/federado_flower.py` y los 72 tests **no se tocan** — son la fuente de todos los resultados
+documentados. La app de despliegue (`flower_app/tfm_fl`) vive aparte y **reutiliza** `MLPConEmbeddings`,
+`get_params`/`set_params` y, sobre todo, la clase `ClienteSilo` completa (con su lógica de FedAvg/
+FedProx) importándolas de `src/`. Lo único que cambia es la infraestructura de ejecución y de dónde
+salen los datos: cada silo lee su propio parquet local en vez de una partición en memoria.
+
+### Arquitectura del simulacro
+
+- **1 coordinador neutral** (VM aparte) con el SuperLink + ServerApp (estrategia FedAvg/FedProx) +
+  `evaluate_fn`. El coordinador solo ve pesos agregados y un `val_global` de referencia — nunca los
+  datos de train de ningún silo (patrón estándar de server-side evaluation, documentado como tal).
+- **3 VMs de silo** (Grande/Mediano/Pequeño), cada una con un SuperNode + ClientApp y ÚNICAMENTE
+  su propio parquet de train. El silo se declara por `--node-config "silo='Grande'"`; `client_app`
+  lo resuelve y carga solo ese fichero. Aislamiento físico, verificable por SSH.
+- **Dashboard:** el `evaluate_fn` loguea `val_loss`/`wmape_val` por ronda a MLflow → Azure ML
+  Studio (experimento `tfm-federado-simulacro`), que se actualiza en vivo. El **mismo workspace**
+  de Azure ML sirve de tracking (dashboard) y de registro del modelo final — unifica las dos
+  peticiones abiertas (dashboard + registro de modelos de la Fase 4) en un solo recurso.
+- **Sin secretos:** el coordinador usa *managed identity* (rol "AzureML Data Scientist") — no hay
+  ninguna clave en el repo ni en las VMs.
+
+### Verificación de equivalencia (paso 2) — el hallazgo clave, sin gastar en Azure
+
+Antes de provisionar nada, se verificó que la app de despliegue **reproduce el algoritmo
+documentado**. En vez de la CLI `flwr run` (que en esta versión, flwr 1.32.1, migra la config de
+federación a un fichero global `~/.flwr/config.toml` y falla al arrancar el SuperLink local en
+Windows), se corrieron los mismos `ServerApp`/`ClientApp` de la app con `run_simulation()` — el
+motor exacto que usa `src/federado_flower.py`. Resultado:
+
+| | ronda 0 | mejor val_loss | ronda del mejor |
+|---|---|---|---|
+| Simulación documentada (fedavg_el2, Sesión 28) | 5,018 | 0,0547 | 4 |
+| App de despliegue (`run_simulation`) | 4,965 | 0,0530 | 5 |
+
+Misma inicialización aleatoria (~5,0), misma convergencia a ~0,053-0,055 hacia la ronda 3-5. Las
+diferencias son no-determinismo de PyTorch, no estructurales. **Prueba de que el "simulacro de
+verdad" en Azure no cambia el algoritmo, solo la infraestructura** — de-riesga el gasto en la nube.
+
+### Coste — respuesta a "¿alcanza el crédito de estudiante ($100)?"
+
+Sí, con holgura. VMs serie B (CPU; el MLP tiene ~5.000 parámetros, una GPU sería absurda),
+~$0,17/hora las 4 encendidas, una corrida de 15 rondas ~15-30 min. Todo el ejercicio ≈ **$2-6 de
+cómputo**. El riesgo no es la tarifa sino olvidar VMs encendidas — mitigado por `auto-shutdown` a
+las 22:00, `deallocate.sh` (páralo al terminar cada sesión, gasto → ~0) y `destroy.sh` (borrado
+total). Todo provisionado por script `az` (idempotente, reproducible, destruible) — nunca a mano.
+
+### Ajuste de alcance sobre lo planificado
+
+- La CLI de despliegue de Flower cambió entre versiones (config de conexión ahora en
+  `~/.flwr/config.toml`, no en el pyproject de la app). Los scripts se adaptaron: `05_run.sh`
+  escribe ese fichero con la IP del coordinador antes de lanzar la corrida.
+- El código de la app tiene un orden de imports DELIBERADO (`task.py` primero, porque configura
+  `sys.path` para importar de `src/`); el isort de ruff lo rompía. Se excluyó `flower_app/` del
+  linter raíz (igual que `notebooks/`), documentado en `pyproject.toml`.
+
+### Estado: código listo y verificado; ejecución en Azure pendiente del autor
+
+Todo lo que se puede construir y verificar **sin credenciales de Azure y sin gastar** está hecho:
+la Flower App (equivalencia confirmada), el reparto de datos aislado (293.997 filas de train sin
+solape entre silos), los 11 scripts de infra (sintaxis validada), el runbook. `ruff` limpio,
+72/72 tests pasan. Los pasos 3-9 (provisionar, desplegar, correr, ver el dashboard, registrar,
+deallocate) requieren `az login` interactivo del autor y gastan crédito real — se ejecutan
+siguiendo `infra/README.md`, no de forma autónoma. Prerrequisito: instalar Azure CLI (`az`, aún no
+presente en el PC).
+
+### Reproducibilidad (parte local, ya verificada)
+```bash
+cd "C:\Users\alefl\OneDrive\Escritorio\tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe infra/02_split_datos.py
+cd flower_app && PYTHONPATH=. ../.venv/Scripts/python.exe ../infra/verificar_equivalencia_local.py
+# -> val_loss por ronda equivalente a reports/historial_rondas_condicion_D.csv (fedavg_el2)
+```
+La parte Azure (pasos 3-9): ver `infra/README.md`.
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

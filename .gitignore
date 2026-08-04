@@ -29,7 +29,15 @@ outputs/
 *.ckpt
 *.pt
 *.pth
+*.npz
 *.log
+
+# --- Simulacro federado en Azure (Fase 4, Sesión 30) ---
+infra/datos_silos/
+infra/checkpoints_despliegue/
+infra/modelo_registrado/
+*.fab
+azure_env.sh  # variables locales del entorno Azure (subscription id, IPs) -- no al repo
 
 # --- Sistema ---
 .DS_Store

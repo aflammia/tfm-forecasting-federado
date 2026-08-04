@@ -1,0 +1,12 @@
+# Dependencias mínimas para las VMs del simulacro (cloud-init las instala al arrancar). Es un
+# SUBSET del requirements.txt raíz -- las VMs no necesitan lightgbm, statsmodels, streamlit, dvc,
+# hydra, wandb ni las herramientas de notebook. torch se instala CPU-only (ver cloud-init).
+flwr[simulation]>=1.32.0
+torch
+pandas>=2.0
+numpy>=1.24
+pyarrow>=14.0
+
+# Solo el coordinador (dashboard -> Azure ML). Inofensivo instalarlo también en los silos.
+mlflow>=2.15
+azureml-mlflow>=1.57

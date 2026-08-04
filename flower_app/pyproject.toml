@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tfm_fl"
+version = "1.0.0"
+description = "Simulacro federado real (Deployment Engine) del TFM: 3 silos, FedAvg/FedProx, dashboard en Azure ML"
+license = "MIT"
+dependencies = [
+    "flwr[simulation]>=1.32.0",
+    "torch",
+    "pandas",
+    "pyarrow",
+    "numpy",
+    # mlflow + azureml-mlflow solo hacen falta en el coordinador de Azure (dashboard). No se
+    # incluyen aquí como dependencia dura para no cargarlas en la simulación local del paso 2;
+    # cloud-init las instala en la VM del coordinador (ver infra/cloud-init-coordinador.yaml).
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["tfm_fl"]
+
+[tool.flwr.app]
+publisher = "aflammia"
+
+[tool.flwr.app.components]
+serverapp = "tfm_fl.server_app:app"
+clientapp = "tfm_fl.client_app:app"
+
+[tool.flwr.app.config]
+# Hiperparámetros de la corrida (overridables en `flwr run` con --run-config "clave=valor").
+# Valores por defecto = arquitectura ganadora del tuning (Sesión 28) + config de la Condición D.
+num-server-rounds = 15
+local-epochs = 2
+lr = 0.002
+estrategia = "fedavg"
+proximal-mu = 0.01
+
+# NOTA (flwr 1.32.1): esta versión mueve la config de CONEXIÓN a SuperLinks a un fichero global
+# ~/.flwr/config.toml (no en este pyproject). infra/05_run.sh escribe ahí la entrada
+# `remote-federation` con la IP real del coordinador antes de lanzar `flwr run . remote-federation`.
+# La verificación de equivalencia LOCAL (paso 2) no usa `flwr run` en absoluto: corre los app
+# objects con `run_simulation()` -- el mismo motor que src/federado_flower.py (ver
+# infra/verificar_equivalencia_local.py).
+[tool.flwr.federations]
+default = "local-simulation"
+
+[tool.flwr.federations.local-simulation]
+options.num-supernodes = 3
+
+[tool.flwr.federations.remote-federation]
+address = "COORDINADOR_IP:9093"
+insecure = true

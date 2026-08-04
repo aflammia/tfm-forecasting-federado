@@ -3,7 +3,10 @@ line-length = 100
 target-version = "py311"
 # notebooks/ son material de apoyo (repasos ejecutados manualmente, no resultado de
 # investigación) -- no forman parte del pipeline reproducible que el CI protege.
-exclude = ["notebooks"]
+# flower_app/ es una Flower App autocontenida con su propio pyproject y un orden de imports
+# DELIBERADO (task.py debe cargarse antes que los módulos de src/ porque configura sys.path); el
+# isort de ruff lo rompería. Se excluye del linter raíz igual que notebooks.
+exclude = ["notebooks", "flower_app"]
 
 [tool.ruff.lint]
 # E501 (línea larga) queda fuera: hay comentarios/docstrings en español que la superan y no
