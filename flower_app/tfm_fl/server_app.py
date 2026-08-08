@@ -37,11 +37,14 @@ class _Dashboard:
     corre en la simulación local (sin dashboard, solo prints -- paso 2 de equivalencia) y en el
     coordinador de Azure (MLFLOW_TRACKING_URI apuntando al workspace = dashboard en vivo)."""
 
-    def __init__(self, params: dict):
+    def __init__(self, params: dict, uri: str = ""):
         self._mlflow = None
-        uri = os.environ.get("MLFLOW_TRACKING_URI")
+        # La URI llega por run_config (pasada con `flwr run --run-config`), no por env: el superexec
+        # de Flower NO propaga el entorno del proceso padre al ServerApp. Fallback a la env var por
+        # si se corre fuera de Flower (p.ej. la simulacion local de equivalencia).
+        uri = uri or os.environ.get("MLFLOW_TRACKING_URI", "")
         if not uri:
-            print("[dashboard] MLFLOW_TRACKING_URI no configurado -- solo se imprimen métricas "
+            print("[dashboard] sin MLFLOW_TRACKING_URI -- solo se imprimen métricas "
                   "(modo simulación local, sin dashboard).")
             return
         try:
@@ -99,13 +102,14 @@ def server_fn(context: Context) -> ServerAppComponents:
     proximal_mu = float(context.run_config.get("proximal-mu", 0.01))
     lr = float(context.run_config.get("lr", 0.002))
     local_epochs = int(context.run_config.get("local-epochs", 2))
+    mlflow_uri = str(context.run_config.get("mlflow-tracking-uri", ""))
     arq = cargar_arquitectura()
 
     dashboard = _Dashboard({
         "estrategia": estrategia, "num_rounds": num_rounds, "lr": lr,
         "local_epochs": local_epochs, "proximal_mu": proximal_mu if estrategia == "fedprox" else 0,
         "arq_hidden1": arq.hidden1, "arq_hidden2": arq.hidden2, "arq_dropout": arq.dropout,
-    })
+    }, uri=mlflow_uri)
 
     modelo_inicial = MLPConEmbeddings(arq=arq)
     parametros_iniciales = ndarrays_to_parameters(get_params(modelo_inicial))

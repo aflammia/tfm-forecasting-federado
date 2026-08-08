@@ -1,14 +1,17 @@
 #cloud-config
-# cloud-init.yaml — se ejecuta en cada VM al primer arranque (az vm create --custom-data).
-# Instala solo lo básico del SO + Python; las dependencias de Python (torch CPU, flwr, ...) las
-# instala infra/03_deploy.sh DESPUÉS de subir el código (para no duplicar la lista de deps: la
-# fuente única es flower_app/requirements.txt). Mantener esto mínimo acelera el arranque.
+# cloud-init.yaml -- se ejecuta en cada VM al primer arranque (az vm create --custom-data).
+# Instala solo lo basico del SO + Python; las dependencias de Python (torch CPU, flwr, ...) las
+# instala infra/03_deploy.sh DESPUES de subir el codigo (fuente unica: flower_app/requirements.txt).
+# ASCII sin tildes a proposito: el az CLI codifica custom-data como latin-1 y falla con UTF-8.
 package_update: true
 packages:
   - python3-pip
   - python3-venv
   - git
 runcmd:
+  # Swap de 2 GB: red de seguridad para las VMs B1ms (2 GB RAM) al instalar/cargar torch.
+  - fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
   # Crear el venv una vez, para que 03_deploy.sh solo tenga que hacer pip install dentro.
   - python3 -m venv /home/azureuser/venv
   - chown -R azureuser:azureuser /home/azureuser/venv

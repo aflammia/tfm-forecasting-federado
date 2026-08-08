@@ -14,24 +14,30 @@ REPO="$(cd "$DIR/.." && pwd)"
 source "$DIR/config.sh"
 ESTRATEGIA="${1:-fedavg}"
 
-COORD_IP="$(az vm show -d -g "$RG" -n "$VM_COORD" --query publicIps -o tsv)"
+AGR_IP="$(az vm show -d -g "$RG" -n "$VM_AGREGADOR" --query publicIps -o tsv)"
+# URI de MLflow del workspace -> se pasa al ServerApp por run-config (el superexec no propaga env).
+MLFLOW_URI="$(az ml workspace show -g "$RG" -n "$WORKSPACE" --query mlflow_tracking_uri -o tsv)"
 
-# Config de conexión al SuperLink (Exec API) para esta versión de flwr.
+# Config de conexion al SuperLink (Exec API) para esta version de flwr.
 mkdir -p "$HOME/.flwr"
 cat > "$HOME/.flwr/config.toml" <<EOF
 [superlink]
 default = "remote-federation"
 
 [superlink.remote-federation]
-address = "${COORD_IP}:${PUERTO_EXEC}"
+address = "${AGR_IP}:${PUERTO_EXEC}"
 insecure = true
 EOF
 
-echo "== Lanzando corrida '$ESTRATEGIA' contra $COORD_IP:$PUERTO_EXEC =="
+echo "== Lanzando corrida '$ESTRATEGIA' contra $AGR_IP:$PUERTO_EXEC =="
 cd "$REPO/flower_app"
+# PYTHONIOENCODING/PYTHONUTF8: la consola de Windows (cp1252) no codifica el emoji 🌸 que imprime
+# flwr y revienta -> forzar UTF-8.
+export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 "$REPO/.venv/Scripts/flwr.exe" run . remote-federation \
-  --run-config "estrategia='${ESTRATEGIA}'" 2>/dev/null || \
-  flwr run . remote-federation --run-config "estrategia='${ESTRATEGIA}'"
+  --run-config "estrategia='${ESTRATEGIA}' mlflow-tracking-uri='${MLFLOW_URI}'" || \
+  flwr run . remote-federation \
+  --run-config "estrategia='${ESTRATEGIA}' mlflow-tracking-uri='${MLFLOW_URI}'"
 
 echo
 echo "OK — corrida enviada. Abre Azure ML Studio -> Jobs/Experiments -> 'tfm-federado-simulacro'"

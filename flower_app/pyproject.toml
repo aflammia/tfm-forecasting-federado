@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "tfm_fl"
+name = "tfm-fl"
 version = "1.0.0"
 description = "Simulacro federado real (Deployment Engine) del TFM: 3 silos, FedAvg/FedProx, dashboard en Azure ML"
 license = "MIT"
@@ -36,19 +36,13 @@ local-epochs = 2
 lr = 0.002
 estrategia = "fedavg"
 proximal-mu = 0.01
+# URI de tracking de MLflow -> Azure ML (dashboard). Se pasa por `flwr run --run-config` (05_run.sh)
+# porque el superexec de Flower no propaga las env vars al ServerApp. Vacio = sin dashboard.
+mlflow-tracking-uri = ""
 
-# NOTA (flwr 1.32.1): esta versión mueve la config de CONEXIÓN a SuperLinks a un fichero global
-# ~/.flwr/config.toml (no en este pyproject). infra/05_run.sh escribe ahí la entrada
-# `remote-federation` con la IP real del coordinador antes de lanzar `flwr run . remote-federation`.
-# La verificación de equivalencia LOCAL (paso 2) no usa `flwr run` en absoluto: corre los app
-# objects con `run_simulation()` -- el mismo motor que src/federado_flower.py (ver
-# infra/verificar_equivalencia_local.py).
-[tool.flwr.federations]
-default = "local-simulation"
-
-[tool.flwr.federations.local-simulation]
-options.num-supernodes = 3
-
-[tool.flwr.federations.remote-federation]
-address = "COORDINADOR_IP:9093"
-insecure = true
+# IMPORTANTE (flwr 1.32.1): la config de CONEXION a SuperLinks NO va aqui. Esta version migra
+# cualquier bloque [tool.flwr.federations] a ~/.flwr/config.toml, y si hubiera un placeholder
+# (p.ej. COORDINADOR_IP) lo resucitaria SOBRESCRIBIENDO la IP real que escribe infra/05_run.sh.
+# Por eso NO hay bloque de federaciones aqui: 05_run.sh escribe ~/.flwr/config.toml con la IP real
+# del agregador. La verificacion de equivalencia LOCAL (paso 2) no usa `flwr run`: corre los app
+# objects con run_simulation() (infra/verificar_equivalencia_local.py).
