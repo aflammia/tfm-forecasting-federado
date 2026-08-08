@@ -2189,6 +2189,80 @@ La parte Azure (pasos 3-9): ver `infra/README.md`.
 
 ---
 
+## Sesión 30b — Ejecución real del simulacro en Azure (con el autor, en directo)
+
+**Fecha:** 2026-08-08
+**Resultado:** el simulacro corrió de extremo a extremo sobre **3 VMs reales** en Azure. La
+federación ejecutó FedAvg y FedProx sobre los 3 silos (cada uno con SOLO sus datos, aislamiento
+verificado por SSH), el **`val_loss` por ronda se logueó en vivo a Azure ML Studio** (el
+dashboard), y el modelo global quedó **registrado** (`tfm-federado-global v1`). El `val_loss`
+federado convergió de ~4,9 (init aleatorio) a ~0,05 hacia la ronda 3-5 — la MISMA trayectoria que
+la simulación documentada (Sesión 28, fedavg_el2), ahora sobre infraestructura distribuida de
+verdad. Modelo registrado: mejor ronda 7, val_loss=0,05175, wmape_val=0,1253.
+
+### Arquitectura final (ajustada a la realidad del nivel estudiante)
+3 VMs **B2s_v2** (2 vCPU, 8 GB) en **spaincentral**: `vm-silo-grande` (silo Grande **+**
+agregador/SuperLink), `vm-silo-mediano`, `vm-silo-pequeno`. Agregador co-alojado en Grande (patrón
+FL cross-silo legítimo), forzado por la cuota (6 vCPU regionales) y la falta de capacidad de VMs
+de 1 vCPU. Coste real del ejercicio completo: **muy por debajo de $5** (VMs deallocated al
+terminar).
+
+### Cadena de obstáculos reales resueltos (todos dejados reproducibles en los scripts)
+Esta sesión fue, en la práctica, un curso acelerado de las fricciones reales de desplegar FL en
+una cloud con una suscripción restringida. Cada uno se diagnosticó en vivo y se corrigió en el
+script correspondiente:
+
+1. **Región bloqueada por política** — westeurope "not accepting new customers" para la
+   suscripción de estudiante. Se sondearon regiones permitidas → **spaincentral** (la más cercana).
+2. **Cuota de vCPUs** — 6 regionales / 4 familia B. El diseño de 4 nodos (8 vCPU) no cabía →
+   **3 nodos** con agregador co-alojado.
+3. **Capacidad de VMs pequeñas** — B1s/B1ms sin stock en spaincentral (`SkuNotAvailable`) → B2s_v2.
+4. **Encoding de cloud-init** — el `az` CLI codifica `--custom-data` como latin-1 y fallaba con
+   las tildes → cloud-init en ASCII.
+5. **Consistencia eventual de la región** — VNet/NSG daban `ResourceNotFound` transitorio en el
+   comando siguiente → helper `reintentar` que reintenta solo ese tipo de fallo.
+6. **Bug de `az role assignment create`** — `MissingSubscription` en az 2.89.0 → asignación de rol
+   por la **API REST de ARM** (`az rest`).
+7. **auto-shutdown no soportado** en spaincentral (DevTestLab/schedules) → best-effort; control de
+   coste vía `deallocate.sh`.
+8. **Python 3.10 vs flwr 1.32** — Ubuntu 22.04 trae 3.10, flwr 1.32 exige ≥3.11 → instalar 3.11
+   (deadsnakes) y recrear el venv en cada VM.
+9. **Versión de flwr desalineada** — las VMs instalaban la última (1.33), el PC tenía 1.32.1; el
+   protocolo CLI↔SuperLink debe coincidir → `flwr[simulation]==1.32.1` pineado en ambos.
+10. **SSH cuelga al arrancar demonios** — el comando inline no soltaba el canal → `ssh bash -s`
+    con heredoc + `setsid`.
+11. **Emoji 🌸 de flwr** revienta la consola Windows (cp1252) → `PYTHONIOENCODING=utf-8`.
+12. **Placeholder de IP resucitado** — la migración de config de flwr re-leía
+    `[tool.flwr.federations]` del pyproject (con `COORDINADOR_IP`) y sobrescribía la IP real →
+    eliminado el bloque; la conexión va en `~/.flwr/config.toml` (escrito por 05_run).
+13. **Nombre de app inválido** — Flower rechaza guiones bajos → `name = "tfm-fl"`.
+14. **ServerApp en venv aislado sin mlflow** — el SuperExec instala solo las deps del FAB (sin
+    mlflow) → `--disable-runtime-dependency-installation` (ServerApp en el venv base, que sí tiene
+    mlflow + azure).
+15. **El entorno no llega al ServerApp** — el SuperExec no propaga las env vars → la URI de MLflow
+    se pasa por **`--run-config`** (vía idiomática de Flower) y `server_app` la lee de `run_config`.
+
+### Verificación
+- Aislamiento: `ls ~/datos` en cada VM de silo muestra solo su parquet (grande además tiene
+  val_global, que no es train de nadie) — comprobado por SSH.
+- Federación: `superlink.log` del agregador muestra los 3 SuperNodes registrados (3 node_id
+  distintos) y las corridas creando run + tareas.
+- Dashboard: consulta MLflow del experimento `tfm-federado-simulacro` → run `fedavg-15rondas` con
+  16 pasos de `val_loss` (r0≈4,87 → r5≈0,065), coherente con la simulación local del paso 2.
+- Modelo: `tfm-federado-global v1` en el registro del workspace, con tags (mejor ronda, val_loss,
+  wmape, arquitectura).
+- Coste: las 3 VMs quedaron `deallocated` al terminar (`az vm list -d` → "VM deallocated").
+
+### Nota honesta
+La verificación de equivalencia local (Sesión 30, paso 2) ya garantizaba que el ALGORITMO era el
+mismo; esta sesión demuestra que además corre sobre INFRAESTRUCTURA distribuida real, con todas las
+fricciones que eso conlleva. El valor para el TFM no es solo "funciona en Azure" sino el **registro
+honesto de cada fricción y su solución** — material directo para el capítulo de MLOps/despliegue.
+La infra queda en `rg-tfm-federado` (VMs deallocated); se retoma con `az vm start` o se borra con
+`infra/destroy.sh`.
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

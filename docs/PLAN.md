@@ -190,7 +190,11 @@ disponibles (Sesiones 26-27) sostienen la respuesta a RQ1.
   workspace `ws-tfm-federado` (`infra/06_registrar_modelo.py`).
 
 ### FASE 4 (extensión) — Simulacro federado REAL en Azure
-🔧 **Código listo y verificado en local; ejecución en Azure pendiente del autor (2026-08-04, Sesión 30).**
+✅ **EJECUTADO de extremo a extremo (2026-08-08, Sesión 30/30b).** 3 VMs B2s_v2 en spaincentral,
+FedAvg+FedProx sobre los 3 silos reales, dashboard en vivo en Azure ML Studio, modelo
+`tfm-federado-global v1` registrado. val_loss converge de ~4,9 a ~0,05 (igual que la simulación).
+Coste real <$5; VMs deallocated al terminar. Cadena de fricciones reales resueltas y reproducibles
+en los scripts (ver RESEARCH_LOG 30b). El código estaba listo y verificado en local desde 2026-08-04.
 Del Simulation Engine (un proceso) al **Deployment Engine** de Flower: 3 VMs (una por silo, cada
 una con solo sus datos) + 1 coordinador neutral, entrenando por gRPC, con dashboard en vivo en
 Azure ML Studio (MLflow) y registro del modelo global.
