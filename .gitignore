@@ -43,3 +43,17 @@ azure_env.sh
 # --- Sistema ---
 .DS_Store
 Thumbs.db
+
+# --- Memoria LaTeX (artefactos de compilacion; main.pdf SI se versiona) ---
+memoria/*.aux
+memoria/*.bbl
+memoria/*.bcf
+memoria/*.blg
+memoria/*.fdb_latexmk
+memoria/*.fls
+memoria/*.lof
+memoria/*.lot
+memoria/*.out
+memoria/*.run.xml
+memoria/*.synctex.gz
+memoria/*.toc

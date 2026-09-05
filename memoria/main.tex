@@ -1,0 +1,49 @@
+% ===========================================================================
+% Memoria del Trabajo Fin de Máster
+% Máster Universitario en Análisis de Datos en Ingeniería (MADI) — Tecnun
+%
+% Compilar:  latexmk -pdf main.tex     (dentro de memoria/)
+% ===========================================================================
+\documentclass[12pt,a4paper,oneside]{report}
+
+\input{preambulo}
+
+% --- Datos del trabajo -----------------------------------------------------
+\newcommand{\tituloTFM}{Aprendizaje federado para la previsión de demanda en
+  retail: evaluación frente a modelos locales, centralizados y convencionales}
+\newcommand{\autorTFM}{Alejandro Flammia}
+\newcommand{\fechaTFM}{septiembre de 2026}
+% ---------------------------------------------------------------------------
+
+\begin{document}
+
+\input{portada}
+
+\pagenumbering{roman}
+
+\input{capitulos/00_resumen}
+\input{capitulos/00_agradecimientos}
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+\cleardoublepage
+\pagenumbering{arabic}
+
+\input{capitulos/01_introduccion}
+\input{capitulos/02_estado_del_arte}
+\input{capitulos/03_objetivos}
+\input{capitulos/04_materiales_metodos}
+\input{capitulos/05_resultados}
+\input{capitulos/06_discusion}
+\input{capitulos/07_negocio}
+\input{capitulos/08_presupuesto}
+\input{capitulos/09_conclusiones}
+
+\printbibliography[heading=bibintoc,title={Bibliografía}]
+
+\appendix
+\input{capitulos/10_anexos}
+
+\end{document}

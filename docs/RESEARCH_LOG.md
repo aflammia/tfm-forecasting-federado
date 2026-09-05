@@ -2263,6 +2263,97 @@ La infra queda en `rg-tfm-federado` (VMs deallocated); se retoma con `az vm star
 
 ---
 
+## Sesión 31 — T3.5: contraste estadístico formal (Wilcoxon) de todas las condiciones
+
+**Fecha:** 2026-09-05
+**Script nuevo:** `src/22_significancia.py`
+**Salidas:** `reports/significancia_wilcoxon.csv`, `reports/por_serie_<metodo>_test.csv` (7 ficheros)
+**Objetivo:** cerrar T3.5, la única pieza del diseño experimental que seguía pendiente. Hasta ahora
+las condiciones se comparaban por sus medianas agregadas, sin ningún test de significación, porque
+solo la Condición E persistía métricas por serie. Sin este contraste, el capítulo de Resultados de
+la memoria no podría afirmar que ninguna diferencia sea estadísticamente real.
+
+### Método
+
+Un único script calcula las métricas por serie de los siete métodos **en la misma corrida y sobre el
+mismo universo de series** -- requisito de un test pareado -- y después aplica
+`comparar_condiciones()` (`src/metrics.py`, Wilcoxon signed-rank pareado por tienda×familia, ya
+testeado desde la Sesión 18). Decisiones de coste y de coherencia:
+
+- **No se reentrena lo caro.** D se reconstruye desde los checkpoints ya en disco
+  (`checkpoints_federado/fedavg/`), eligiendo la mejor ronda por pérdida sobre el val global; LightGBM
+  reutiliza los hiperparámetros ya buscados (Sesión 22) sin repetir la búsqueda; ETS se omite (mucho
+  más lento y claramente peor, no aporta al contraste). A, B y C sí se reentrenan (son baratos).
+- **Linaje coherente con el resultado titular.** D es el FedAvg ORIGINAL (Sesión 26), que es del que
+  se derivó la Condición E titular (Sesión 27); así la cadena A→B→C→D→E es comparable entre sí. La
+  variante tuneada de D (Sesión 28) se reporta aparte.
+- **Corrección por comparaciones múltiples.** Se ejecutan ocho contrastes sobre los mismos datos, así
+  que el p-valor crudo sobreestima la significación: se añade Holm-Bonferroni (`statsmodels`).
+
+### Verificación de reproducibilidad (resultado notable)
+
+Las siete medianas recalculadas coinciden **exactamente** con las ya publicadas en sesiones
+anteriores, pese a ser un reentrenamiento independiente meses después:
+
+| Método | WMAPE test mediana (Sesión 31) | Documentado previamente |
+|---|---|---|
+| LightGBM global | 0,1320 | 0,1320 (Sesión 22) |
+| Media móvil (4 sem.) | 0,1379 | 0,1379 (T2.2) |
+| E — Federado + personalización | 0,1379 | 0,1379 (Sesión 28) |
+| A — Local | 0,1476 | 0,1476 (Sesión 23) |
+| D — Federado (FedAvg) | 0,1507 | 0,1507 (Sesión 26) |
+| B — Centralizado por silo | 0,1676 | 0,1676 (Sesión 24) |
+| C — Centralizado global | 0,1736 | 0,1736 (Sesión 24) |
+
+La mejor ronda de D vuelve a ser la 3 (val_loss = 0,06057), igual que en la Sesión 26.
+
+### Resultados del contraste
+
+Los ocho contrastes son significativos incluso tras la corrección de Holm. Δ es la variación de la
+mediana de B respecto a A (negativo = B mejor).
+
+| Contraste | n pareado | Δ | p (Holm) | Lectura |
+|---|---|---|---|---|
+| A (Local) vs D (Federado) | 1.655 | +1,89% | 8,0e-22 | **D es significativamente PEOR que A** |
+| A (Local) vs E (Fed.+person.) | 1.655 | −6,57% | 3,5e-02 | E mejor que A -- el contraste más débil |
+| C (Centr. global) vs D (Federado) | 1.686 | −13,21% | 2,4e-34 | Federar bate a centralizar |
+| D (Federado) vs E (Fed.+person.) | 1.655 | −8,31% | 3,9e-47 | La personalización aporta de verdad |
+| A (Local) vs B (Centr. por silo) | 1.655 | +12,29% | 1,6e-23 | Centralizar por silo empeora |
+| A (Local) vs C (Centr. global) | 1.655 | +17,64% | 4,2e-61 | Centralizar del todo empeora aún más |
+| E vs Media móvil | 1.655 | −0,74% | 1,6e-03 | E mejor que la media móvil |
+| E vs LightGBM global | 1.655 | +3,95% | 1,5e-47 | **LightGBM sigue ganando, y no es ruido** |
+
+### Interpretación
+
+1. **El federado por sí solo no basta.** D es significativamente PEOR que A (p≈1e-21): entrenar de
+   forma federada sin personalizar no llega siquiera al modelo local. Es un resultado negativo claro
+   que ya se intuía por las medianas y que ahora queda establecido.
+2. **La personalización es lo que hace funcionar al federado.** D→E es el contraste más fuerte del
+   estudio (−8,31%, p≈4e-47).
+3. **El valor de colaborar es real pero modesto.** A→E, la comparación que ancla el capítulo
+   económico (RQ3), mejora un 6,57% y es significativa, pero es **el contraste más débil de los ocho**
+   (p=0,035, justo por debajo del umbral tras Holm). La memoria debe presentarlo con esa cautela: hay
+   señal, no es un efecto arrollador.
+4. **La "escalera" de centralización queda confirmada estadísticamente.** A < B < C con p-valores
+   muy pequeños: en este dataset, agregar datos de tiendas heterogéneas en un solo modelo empeora de
+   forma sistemática, no anecdótica.
+5. **Matiz sobre E vs media móvil.** En las medianas globales ambos dan 0,1379, lo que parecía un
+   empate. Pero esas medianas se calculan sobre conjuntos de series distintos (1.782 frente a 1.749).
+   Sobre las 1.655 series **comunes**, que es lo que compara el test pareado, E es mejor de forma
+   significativa (p=0,0016), aunque el efecto sea pequeño (−0,74%). El test pareado es la comparación
+   correcta; la memoria explicará esta diferencia para que no parezca una contradicción.
+6. **LightGBM gana de forma inequívoca.** La distancia de 3,95% frente a E no es ruido (p≈1e-47).
+   Se mantiene la lectura honesta de todo el proyecto: el federado no supera al mejor método
+   centralizado; su valor está en permitir colaborar sin ceder datos.
+
+### Reproducibilidad
+```bash
+cd "C:/Users/alefl/OneDrive/Escritorio/tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/22_significancia.py
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

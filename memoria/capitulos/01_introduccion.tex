@@ -1,0 +1,24 @@
+\chapter{Introducción}
+\label{cap:introduccion}
+
+Prueba de compilación. Cita entre paréntesis \parencite{mcmahan2017} y cita en texto
+\textcite{li2020fedprox}. Cifra con formato español: 0,1379.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      nodo/.style={draw,rounded corners,minimum width=2.2cm,minimum height=0.8cm,font=\small},
+      >={Stealth[round]}]
+    \node[nodo] (s) {Servidor};
+    \node[nodo,below left=1.2cm and 1.2cm of s] (a) {Silo A};
+    \node[nodo,below=1.2cm of s] (b) {Silo B};
+    \node[nodo,below right=1.2cm and 1.2cm of s] (c) {Silo C};
+    \draw[->] (a) -- (s);
+    \draw[->] (b) -- (s);
+    \draw[->] (c) -- (s);
+  \end{tikzpicture}
+  \caption{Prueba de diagrama vectorial en TikZ.}
+  \label{fig:prueba_tikz}
+\end{figure}
+
+En la \cref{fig:prueba_tikz} se comprueba la referencia cruzada.

@@ -1,0 +1,64 @@
+% ---------------------------------------------------------------------------
+% preambulo.tex — configuración común de la memoria.
+% Estilo tomado de los TFM de Tecnun (portada institucional, índices de figuras
+% y tablas, numeración por capítulo, citas APA).
+% ---------------------------------------------------------------------------
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla,es-noshorthands]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+\usepackage[a4paper,top=3cm,bottom=3cm,left=3cm,right=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% --- Tablas y figuras ---
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{float}
+\graphicspath{{figuras/}}
+
+% --- Matemáticas ---
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% --- Diagramas vectoriales ---
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc,fit,backgrounds}
+
+% --- Encabezados ---
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\nouppercase{\leftmark}}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% --- Enlaces y referencias cruzadas ---
+\usepackage[hidelinks]{hyperref}
+\usepackage{cleveref}
+\crefname{figure}{figura}{figuras}
+\Crefname{figure}{Figura}{Figuras}
+\crefname{table}{tabla}{tablas}
+\Crefname{table}{Tabla}{Tablas}
+\crefname{chapter}{capítulo}{capítulos}
+\Crefname{chapter}{Capítulo}{Capítulos}
+\crefname{section}{sección}{secciones}
+\Crefname{section}{Sección}{Secciones}
+\crefname{equation}{ecuación}{ecuaciones}
+\Crefname{equation}{Ecuación}{Ecuaciones}
+
+% --- Bibliografía en APA 7.ª (coherente con docs/REFERENCIAS.md) ---
+\usepackage[style=apa,backend=biber,natbib=true]{biblatex}
+\DeclareLanguageMapping{spanish}{spanish-apa}
+\addbibresource{bibliografia.bib}
+
+% --- Ajustes de estilo ---
+\setlength{\parskip}{0.4em}
+\renewcommand{\arraystretch}{1.15}
