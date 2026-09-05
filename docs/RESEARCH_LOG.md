@@ -2462,6 +2462,46 @@ cd memoria && bash compilar.sh
 
 ---
 
+## Sesión 33 — Eliminación del capítulo de Presupuesto de la memoria
+
+**Fecha:** 2026-09-05
+**Objetivo:** revisar si el capítulo 8 (Presupuesto), incluido en la Sesión 32 por imitar la
+estructura del TFM de MADI de referencia, tenía sentido para este trabajo.
+
+### Decisión
+
+El autor planteó que el capítulo no aportaba nada al jurado: no hubo gasto real en el proyecto (no
+hay sueldos ni compras que liquidar), y las horas y la tarifa por perfil eran una estimación
+arbitraria. Confirmó además que no es un requisito de la normativa de MADI. Se decidió eliminarlo
+en lugar de mantenerlo reducido, por una razón de fondo más que de forma: era el único capítulo de
+la memoria construido sobre cifras sin trazabilidad a `reports/` o a una fuente citada, en un
+documento cuyo principio rector es que toda cifra se pueda verificar. Su contenido tampoco
+respondía a ninguna de las cinco preguntas de investigación.
+
+### Cambios
+
+- Eliminado `memoria/capitulos/08_presupuesto.tex` y su `\input` en `main.tex`.
+- Corregida la referencia cruzada en `01_introduccion.tex` (§Estructura del documento), que
+  enumeraba el capítulo de Presupuesto entre los capítulos del documento.
+- Corregida la referencia cruzada en `07_negocio.tex` (§RQ3), que comparaba el ahorro estimado
+  con el coste de la infraestructura recogido en ese capítulo; se reformuló la frase sin la cifra
+  de coste, que ya no está documentada en la memoria.
+- La entrada de la Sesión 32 no se modifica (registro inmutable): en su momento el capítulo existía
+  y se documentó como tal; esta entrada deja constancia de que se retiró después.
+
+### Resultado
+
+`memoria/main.pdf` pasa de 62 a 59 páginas, 8 capítulos numerados (antes 9) más anexos. Recompilado
+con `bash compilar.sh`, sin avisos ni referencias rotas.
+
+### Reproducibilidad
+```bash
+cd "C:/Users/alefl/OneDrive/Escritorio/tfm-forecasting-federado/memoria"
+bash compilar.sh
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

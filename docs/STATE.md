@@ -22,7 +22,8 @@
 > tanto a local como a centralizado, más fuerte que "recuperar una brecha". Se encontró y corrigió
 > un bug de aliasing de memoria en `get_params()` (Sesión 26). **T3.5 (contraste de Wilcoxon
 > completo) se cerró en la Sesión 31** y la **Fase 4b de negocio, en la Sesión 32**, que además dejó
-> redactada la memoria del TFM (`memoria/main.pdf`, 62 páginas). Queda pendiente únicamente la
+> redactada la memoria del TFM (`memoria/main.pdf`, 59 páginas tras eliminar el capítulo de
+> Presupuesto por no ser un requisito de la normativa de MADI). Queda pendiente únicamente la
 > revisión de la tutora. T3.4 (stragglers) sigue siendo una extensión opcional no abordada.
 
 ## ✅ Hecho
@@ -70,7 +71,9 @@
 **Todas las fases del proyecto están cerradas** (T1-T3 incluida T3.5, Fase 4 MLOps, simulacro en
 Azure y Fase 4b de negocio). La memoria del TFM está redactada y compila.
 
-- `memoria/main.pdf` — 62 páginas, 9 capítulos + anexos, 12 figuras, 8 tablas. Se genera con
+- `memoria/main.pdf` — 59 páginas, 8 capítulos + anexos, 12 figuras, 8 tablas (Sesión 33: se
+  eliminó el capítulo de Presupuesto — no es requisito de la normativa de MADI y era la única
+  parte del documento apoyada en cifras estimadas sin trazabilidad a `reports/`). Se genera con
   `cd memoria && bash compilar.sh`.
 - Borrador listo para enviar a la tutora (Idoia Ochoa) y recoger correcciones.
 
@@ -78,8 +81,7 @@ Azure y Fase 4b de negocio). La memoria del TFM está redactada y compila.
 1. Incorporar las correcciones que indique la tutora.
 2. Añadir el logotipo oficial de Tecnun a la portada si se dispone de él
    (`memoria/figuras/logo_tecnun.png`; la línea está comentada en `portada.tex`).
-3. Revisar las horas y tarifas del capítulo de Presupuesto, que son una estimación.
-4. Opcional: capturar el cuadro de mando de Azure ML antes de destruir la infraestructura.
+3. Opcional: capturar el cuadro de mando de Azure ML antes de destruir la infraestructura.
 
 **Líneas futuras identificadas** (documentadas en el capítulo de conclusiones): privacidad
 diferencial (RQ5, la más relevante), selección por serie entre modelo personalizado y local,
