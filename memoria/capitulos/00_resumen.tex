@@ -1,9 +1,80 @@
 \chapter*{Resumen}
 \addcontentsline{toc}{chapter}{Resumen}
 
-Pendiente de redacción.
+La previsión de demanda mejora cuando el modelo se entrena con más datos, pero los operadores de
+distribución que competirían por esos datos no pueden compartirlos. El aprendizaje federado propone
+una salida: entrenar un modelo conjunto intercambiando parámetros en lugar de datos. Este trabajo
+evalúa si esa promesa se sostiene empíricamente en la previsión de ventas de un supermercado.
+
+Sobre un histórico real de 54 tiendas y 33 familias de producto, agregado a nivel semanal, se
+comparan cinco condiciones —modelo local por tienda, centralizado por silo, centralizado global,
+federado y federado con personalización— entre sí y frente a cuatro métodos convencionales de
+previsión, con idéntica partición temporal, idéntico protocolo de evaluación y contraste estadístico
+de todas las diferencias mediante el test de Wilcoxon pareado con corrección por comparaciones
+múltiples.
+
+Los resultados contradicen la hipótesis de partida en dos puntos. El modelo centralizado, que la
+literatura suele tomar como techo de rendimiento, resulta ser el peor de los cinco: la precisión
+empeora de forma monótona a medida que se agregan datos de tiendas heterogéneas en un modelo de
+capacidad limitada. Y el modelo federado, por sí solo, es significativamente peor que el modelo
+local; es la personalización posterior por tienda la que lo convierte en la mejor de las cinco
+condiciones, con un WMAPE de 0,1379 frente a 0,1476 del modelo local. Frente a los métodos no
+federados, el balance es más matizado: la mejor condición federada supera por muy poco a una media
+móvil de cuatro semanas y queda un 3,95\,\% por detrás de un modelo LightGBM entrenado sobre datos
+agrupados, diferencia que el contraste confirma como real.
+
+El sistema se desplegó además sobre tres máquinas virtuales independientes en la nube, con
+aislamiento efectivo de los datos de cada silo, verificando que el comportamiento observado en
+simulación se mantiene sobre infraestructura distribuida.
+
+En el plano económico, la colaboración federada reduce un 16,50\,\% el error de previsión ponderado
+por volumen respecto a que cada tienda entrene en solitario, lo que se traduce en un ahorro anual
+estimado de entre 0,5 y 3,9 millones de euros para la red analizada. El beneficio, sin embargo, se
+concentra en las series de mayor volumen y casi la mitad de las series empeoran, lo que aconseja
+seleccionar el modelo serie a serie. Se argumenta finalmente que, para la tarea concreta de
+entrenar un modelo predictivo entre partes que no ceden datos, el aprendizaje federado es un
+primitivo más adecuado que un \emph{data clean room}, sin presentarlos como alternativas
+excluyentes.
+
+\vspace{1em}
+\noindent\textbf{Palabras clave:} aprendizaje federado, previsión de demanda, distribución
+comercial, datos no IID, personalización de modelos, MLOps.
 
 \chapter*{Abstract}
 \addcontentsline{toc}{chapter}{Abstract}
 
-Pending.
+Demand forecasting improves when models are trained on more data, yet retailers who compete for
+that data cannot share it. Federated learning offers a way out: training a joint model by
+exchanging parameters instead of raw data. This work evaluates whether that promise holds
+empirically for supermarket sales forecasting.
+
+Using a real sales history of 54 stores and 33 product families aggregated weekly, five conditions
+—per-store local model, per-silo centralised, globally centralised, federated, and federated with
+personalisation— are compared against each other and against four conventional forecasting methods,
+under an identical temporal split, an identical evaluation protocol, and paired Wilcoxon testing
+with correction for multiple comparisons.
+
+The results contradict the initial hypothesis on two counts. The centralised model, usually treated
+in the literature as the performance ceiling, turns out to be the worst of the five: accuracy
+degrades monotonically as heterogeneous store data are pooled into a capacity-limited model. And
+the federated model on its own is significantly worse than the local one; it is the subsequent
+per-store personalisation that makes it the best of the five conditions, reaching a WMAPE of 0.1379
+against 0.1476 for the local model. Against non-federated methods the picture is more nuanced: the
+best federated condition only marginally outperforms a four-week moving average and falls 3.95\,\%
+short of a LightGBM model trained on pooled data, a gap the statistical test confirms as real.
+
+The system was additionally deployed across three independent cloud virtual machines with effective
+per-silo data isolation, confirming that the behaviour observed in simulation carries over to
+distributed infrastructure.
+
+Economically, federated collaboration reduces volume-weighted forecast error by 16.50\,\% relative
+to each store training alone, which translates into an estimated annual saving of between 0.5 and
+3.9 million euros for the network studied. The benefit is, however, concentrated in high-volume
+series and almost half of the series get worse, which argues for selecting the model series by
+series. Finally, it is argued that for the specific task of training a predictive model across
+parties that do not share data, federated learning is a more suitable primitive than a data clean
+room, without presenting the two as mutually exclusive.
+
+\vspace{1em}
+\noindent\textbf{Keywords:} federated learning, demand forecasting, retail, non-IID data, model
+personalisation, MLOps.

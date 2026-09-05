@@ -1,7 +1,7 @@
 # STATE.md — Estado actual y próxima tarea
 
 > Documento vivo. **Actualízalo al completar cada tarea** (marca hecho, anota lo aprendido).
-> Última actualización: 2026-08-08 — **FASE 1, FASE 2, FASE 3 (core) y FASE 4 (MLOps) completas**,
+> Última actualización: 2026-09-05 — **FASE 1, FASE 2, FASE 3 (core) y FASE 4 (MLOps) completas**,
 > incluido el **simulacro federado REAL en Azure EJECUTADO** (3 VMs, dashboard en Azure ML, modelo
 > registrado), más el tuning de D/E. T1.1-T1.5 (+ corrección Sesión 19); T2.1-T2.5; T3.1-T3.3 (Flower, Condición
 > D FedAvg/FedProx, Condición E personalización); Sesión 28 (tuning); Sesión 29 (CI, Docker,
@@ -20,9 +20,10 @@
 > "brecha recuperada" (T2.1) da un % negativo mecánicamente porque su premisa (centralizado =
 > techo) no se cumple en este dataset heterogéneo — la lectura correcta es que E bate en absoluto
 > tanto a local como a centralizado, más fuerte que "recuperar una brecha". Se encontró y corrigió
-> un bug de aliasing de memoria en `get_params()` (Sesión 26). Próxima: extensiones opcionales
-> (T3.4 stragglers, T3.5 Wilcoxon completo) o pasar directamente a Fase 4 (MLOps: Azure ML,
-> dashboard) / Fase 4b (capítulos de negocio).
+> un bug de aliasing de memoria en `get_params()` (Sesión 26). **T3.5 (contraste de Wilcoxon
+> completo) se cerró en la Sesión 31** y la **Fase 4b de negocio, en la Sesión 32**, que además dejó
+> redactada la memoria del TFM (`memoria/main.pdf`, 62 páginas). Queda pendiente únicamente la
+> revisión de la tutora. T3.4 (stragglers) sigue siendo una extensión opcional no abordada.
 
 ## ✅ Hecho
 
@@ -64,23 +65,25 @@
 - [x] **Fase 4 (MLOps) cerrada, excepto Azure ML (2026-07-31)**: CI (`.github/workflows/ci.yml`: ruff+mypy informativo+pytest, con guard para saltar tests que dependen de datos reales); Docker (`Dockerfile`+`.devcontainer/`, build verificado, ejecución pendiente por caída del daemon local); dashboard Streamlit (`dashboard/app.py`, 3 pestañas, lee `reports/*.csv` ya generados); DVC (`dvc.yaml`, 5 etapas, remoto **local** en `../dvc-storage-tfm/` fuera del repo — funciona solo en esta máquina, repuntable a Azure Blob más adelante; `dvc repro` verificado de extremo a extremo, reproduce cifras idénticas a las de las Sesiones 11-19); Hydra (`conf/`, alcance acotado a los scripts 12/13/14/16/18 — A/B/C, tuning, D — que de verdad se benefician; 17/19 quedan sin Hydra por su acoplamiento cruzado ya existente, decisión justificada en RESEARCH_LOG). mypy encontró y corrigió 3 discrepancias reales de tipo en `modelo_mlp.py`/`federado_flower.py`. 72/72 tests pasan. Ver RESEARCH_LOG Sesión 29.
 - [x] **Simulacro federado REAL en Azure — EJECUTADO de extremo a extremo (2026-08-08)**: paso del Simulation Engine (un proceso) al **Deployment Engine** de Flower — 3 VMs B2s_v2 en **spaincentral** (cada una con SOLO sus datos; agregador co-alojado en `vm-silo-grande` por cuota/capacidad de estudiante), entrenamiento por gRPC. **FedAvg y FedProx corrieron sobre las 3 VMs reales, el `val_loss` por ronda se logueó en vivo a Azure ML Studio (dashboard) y el modelo quedó registrado (`tfm-federado-global v1`).** El val_loss federado converge de ~4,9 a ~0,05 hacia la ronda 3-5, igual que la simulación documentada. `flower_app/` (Flower App de despliegue, reutiliza `ClienteSilo`/`MLPConEmbeddings` de `src/`) + `infra/` (12 scripts). Se resolvió en directo una cadena larga de fricciones reales del nivel estudiante (región bloqueada, cuota, capacidad, encoding, consistencia eventual, bug de `az role assignment`, Python 3.10→3.11, detach de demonios por SSH, emoji en cp1252, env que no llega al ServerApp...), todas dejadas reproducibles en los scripts. Coste real <$5; VMs **deallocated** al terminar. Ver RESEARCH_LOG Sesión 30 y 30b.
 
-## ▶️ PRÓXIMA TAREA — extensiones opcionales, Fase 4b, o Azure ML
+## ▶️ PRÓXIMA TAREA — revisión de la tutora
 
-**Fases 1-4 completas** (Fase 4 sin Azure ML, pendiente de cuenta) **+ tuning de D/E (Sesión 28).**
-- `reports/resultados_condicion_D_federado.csv`, `reports/resultados_condicion_E_personalizacion.csv`
-  — resultados del federado. `reports/historial_rondas_condicion_D.csv` — convergencia por ronda.
-- `data/processed/checkpoints_federado/{fedavg,fedprox}/` — pesos de cada ronda (gitignored,
-  reproducibles con `src/16_condicion_d_federado.py`).
-- `dashboard/app.py` (`streamlit run dashboard/app.py`) — panel de resultados ya navegable.
-- `dvc repro` reproduce todo el pipeline de datos de extremo a extremo; `dvc push`/`dvc pull`
-  contra el remoto local solo funcionan en esta máquina (no hay cuenta cloud configurada aún).
+**Todas las fases del proyecto están cerradas** (T1-T3 incluida T3.5, Fase 4 MLOps, simulacro en
+Azure y Fase 4b de negocio). La memoria del TFM está redactada y compila.
 
-**Opciones para continuar (ninguna bloquea la otra):**
-1. **T3.4** (muestreo de clientes/stragglers) y **T3.5** (Wilcoxon formal completo A-E) — extensiones,
-   no esenciales: las tablas comparativas ya disponibles sostienen la respuesta a RQ1.
-2. **Azure ML** (registro de modelos) — en cuanto exista la cuenta de Azure for Students.
-3. **Fase 4b** (capítulos de negocio, RQ3/RQ4): FL vs. data clean rooms, cuantificación de valor
-   en €. Es solo análisis/escritura, no requiere entrenar nada más.
+- `memoria/main.pdf` — 62 páginas, 9 capítulos + anexos, 12 figuras, 8 tablas. Se genera con
+  `cd memoria && bash compilar.sh`.
+- Borrador listo para enviar a la tutora (Idoia Ochoa) y recoger correcciones.
+
+**Pendiente de la revisión:**
+1. Incorporar las correcciones que indique la tutora.
+2. Añadir el logotipo oficial de Tecnun a la portada si se dispone de él
+   (`memoria/figuras/logo_tecnun.png`; la línea está comentada en `portada.tex`).
+3. Revisar las horas y tarifas del capítulo de Presupuesto, que son una estimación.
+4. Opcional: capturar el cuadro de mando de Azure ML antes de destruir la infraestructura.
+
+**Líneas futuras identificadas** (documentadas en el capítulo de conclusiones): privacidad
+diferencial (RQ5, la más relevante), selección por serie entre modelo personalizado y local,
+ajuste de hiperparámetros específico de la personalización, validación con varios orígenes.
 
 ## ⏳ Pendiente de decisión / acción del usuario
 

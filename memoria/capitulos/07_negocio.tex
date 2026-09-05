@@ -1,4 +1,201 @@
 \chapter{Análisis de negocio}
 \label{cap:negocio}
 
-Pendiente de redacción.
+Este capítulo responde a las dos preguntas de negocio del trabajo: cuánto vale la mejora obtenida
+(RQ3) y por qué el aprendizaje federado sería preferible a un \emph{data clean room} para este
+problema (RQ4).
+
+\section{Valor económico de la colaboración (RQ3)}
+
+\subsection{Qué comparación tiene sentido económico}
+
+La comparación relevante para la decisión de negocio no es la del modelo federado frente al mejor
+método del estudio, sino frente a lo que cada operador podría hacer por su cuenta. Un operador que
+no puede acceder a los datos de sus competidores tiene dos opciones: entrenar en solitario
+(condición A) o participar en una federación y personalizar el resultado (condición E). La
+diferencia entre ambas es el valor de colaborar, y es la que se cuantifica aquí.
+
+Se descarta deliberadamente anclar el análisis en el LightGBM global. Aunque sea el mejor método,
+requiere reunir datos crudos de todas las tiendas, que es precisamente lo que el escenario excluye.
+Usarlo como referencia produciría un resultado engañoso, favorable o desfavorable según cómo se
+plantease.
+
+\subsection{Separación entre lo medido y lo supuesto}
+
+El conjunto de datos no contiene precios ni márgenes. Para evitar que el resultado dependa de forma
+opaca de supuestos externos, el modelo separa explícitamente dos partes:
+
+\begin{itemize}
+  \item La \textbf{parte física} —cuántas unidades de error se evitan— se deriva íntegramente de los
+    resultados del trabajo, sin ningún parámetro externo.
+  \item La \textbf{parte monetaria} —cuánto cuesta cada unidad de error— usa parámetros de sector y
+    se presenta siempre como un rango con análisis de sensibilidad.
+\end{itemize}
+
+Esta separación permite que el lector acepte la primera parte aunque discrepe de la segunda.
+
+\subsection{La parte física: unidades de error evitadas}
+
+El error se agrega ponderando por volumen y no por la mediana de las series. La razón es que el
+dinero sigue al volumen: una serie que vende 10.000 unidades pesa mucho más en la cuenta de
+resultados que una que vende diez. Para cada serie se reconstruye el error absoluto en unidades a
+partir de su WMAPE y de sus ventas reales en el periodo de prueba.
+
+Sobre las 1.655 series comunes a ambas condiciones, que suman 46,0 millones de unidades vendidas en
+las ocho semanas de prueba, el error absoluto agregado pasa de 4,90 millones de unidades en la
+condición A a 4,09 millones en la condición E. Se evitan por tanto \textbf{807.857 unidades de
+error en ocho semanas}, lo que equivale a una reducción del \textbf{16,50\,\%} del error total.
+
+Conviene detenerse en este número, porque difiere sustancialmente del $6{,}57\,\%$ de mejora en la
+mediana por serie que recoge el \cref{cap:resultados}. Ambos son correctos y miden cosas distintas:
+la mediana describe a la serie típica, mientras que el agregado ponderado describe el efecto sobre
+el conjunto del negocio. Que el segundo sea muy superior indica que la personalización mejora
+especialmente en las series de mayor volumen, lo cual es favorable desde el punto de vista
+económico.
+
+\subsection{Robustez: de dónde procede el ahorro}
+
+Antes de traducir esa cifra a euros conviene comprobar si es un efecto general o descansa en unos
+pocos casos. La respuesta, que figura en la \cref{fig:concentracion}, obliga a matizar el resultado.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{negocio_concentracion_ahorro.png}
+  \caption[Concentración del ahorro entre series]{Porcentaje acumulado del ahorro total según las
+  series ordenadas de mayor a menor aportación. La curva supera el 100\,\% y desciende después,
+  porque a partir de cierto punto las series restan en lugar de sumar.}
+  \label{fig:concentracion}
+\end{figure}
+
+El ahorro está muy concentrado: las 10 series con mayor aportación explican el 37,5\,\% del total y
+las 50 primeras, el 84,6\,\%. Más relevante todavía, \textbf{en 764 de las 1.655 series —un
+46,2\,\%— la condición E resulta peor que la condición A}, con un coste conjunto de 207.493 unidades
+que ya está descontado del ahorro neto. A nivel de tienda el balance es positivo en 40 de las 53.
+
+La lectura honesta es, por tanto, que la colaboración federada produce un beneficio agregado
+apreciable, impulsado por las series de mayor volumen, pero que no mejora de forma uniforme y
+perjudica a casi la mitad de las series. Esto es coherente con que el contraste A \emph{vs} E fuera
+el más débil de los ocho.
+
+De aquí se deriva además una recomendación operativa: una implantación real debería decidir por
+serie, sobre el conjunto de validación, si conviene usar el modelo personalizado o el local, en
+lugar de aplicar la personalización de forma indiscriminada. Esa selección capturaría el beneficio
+y evitaría el perjuicio. No se ha implementado ni validado en este trabajo, y se propone como
+línea de continuación.
+
+\subsection{La parte monetaria}
+
+Para traducir las unidades a euros se emplea el siguiente razonamiento. Una unidad mal prevista
+acaba, o bien en exceso de inventario que en categorías perecederas termina en merma —perdiéndose
+el coste del producto—, o bien en una rotura de stock, perdiéndose el margen de la venta no
+realizada. Sin el desglose entre sobreprevisión e infraprevisión, se adopta el supuesto neutral de
+promediar ambos costes.
+
+Tres parámetros se recorren en el análisis de sensibilidad. El \textbf{margen bruto} del comercio de
+alimentación, que las referencias del sector sitúan en torno al 21–22\,\% de la venta, se recorre
+entre el 18 y el 26\,\%. La \textbf{fracción del error que llega a generar coste} —el resto lo
+absorben el stock de seguridad, la reposición intradía o el propio surtido— se recorre entre el 20 y
+el 50\,\%. Y el \textbf{valor medio de la unidad vendida}, que es el parámetro más incierto por
+ausencia de precios en los datos, se recorre entre 1 y 3\,€.
+
+Anualizando las 807.857 unidades del periodo de prueba, el resultado se muestra en la
+\cref{fig:sensibilidad}.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.82\textwidth]{negocio_sensibilidad.png}
+  \caption[Sensibilidad del ahorro anual estimado]{Ahorro anual estimado para el conjunto de las 54
+  tiendas, con margen bruto fijado en el 22\,\%, en función de los dos parámetros más inciertos.}
+  \label{fig:sensibilidad}
+\end{figure}
+
+El rango completo del análisis va de 0,53 a 3,94 millones de euros anuales para el conjunto de la
+red. El escenario central —margen del 22\,\%, un 35\,\% del error con coste asociado y un valor
+unitario de 2\,€— arroja \textbf{aproximadamente 1,84 millones de euros anuales}, del orden de
+35.000\,€ por tienda y año.
+
+Estas cifras deben leerse como un orden de magnitud, no como una estimación precisa. Su valor está
+en indicar que el beneficio potencial es lo bastante grande como para justificar el coste de montar
+la infraestructura, que según el \cref{cap:presupuesto} es de un orden inferior.
+
+\section{Aprendizaje federado frente a \emph{data clean rooms} (RQ4)}
+
+Los \emph{data clean rooms} son hoy la alternativa comercial más extendida para que varias
+organizaciones exploten datos conjuntos sin intercambiarlos, y por tanto la comparación natural para
+el enfoque propuesto.
+
+\subsection{Comparación estructurada}
+
+La \cref{tab:dcr} contrasta ambos enfoques en las dimensiones relevantes para este problema.
+
+\begin{table}[H]
+  \centering
+  \caption[Comparación entre aprendizaje federado y \emph{data clean rooms}]{Comparación de ambos
+  enfoques en las dimensiones relevantes para la previsión colaborativa de demanda.}
+  \label{tab:dcr}
+  \begin{tabular}{p{3.4cm}p{4.7cm}p{4.7cm}}
+    \toprule
+    Dimensión & \emph{Data clean room} & Aprendizaje federado \\
+    \midrule
+    Tarea que resuelve &
+      Consultas y cómputos autorizados sobre datos ya existentes &
+      Entrenamiento de un modelo predictivo nuevo \\
+    Movimiento de datos &
+      Los datos se copian a un entorno común controlado &
+      Los datos no salen de cada participante \\
+    Tercero de confianza &
+      Necesario: alguien opera el entorno &
+      No necesario para custodiar datos; el coordinador solo maneja parámetros \\
+    Casos de uso maduros &
+      Audiencias publicitarias, enriquecimiento y medición de campañas &
+      Modelos predictivos entre silos \\
+    Madurez del \emph{tooling} &
+      Alta, con oferta comercial consolidada &
+      Menor, con marcos abiertos en evolución \\
+    Encaje normativo &
+      Controles de salida y umbrales de agregación &
+      Minimización por diseño, pero los parámetros pueden seguir siendo datos personales \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Argumento}
+
+La diferencia decisiva no es de nivel de protección sino de \textbf{naturaleza de la tarea}. Un
+\emph{data clean room} está diseñado para responder preguntas sobre datos que ya existen: cuántos
+clientes comparten dos empresas, qué solapamiento tienen dos audiencias, qué efecto tuvo una
+campaña. La guía de referencia del sector \parencite{iabtechlab2024} recoge precisamente esos tres
+ámbitos —activación de audiencias, enriquecimiento y medición— como sus casos de uso.
+
+El problema de este trabajo es de otra clase: no se trata de consultar datos existentes sino de
+\textbf{construir un modelo predictivo} cuyo entrenamiento requiere múltiples pasadas iterativas
+sobre los datos de todos los participantes. Podría en principio ejecutarse dentro de un
+\emph{clean room}, pero eso exigiría que todos los participantes depositasen sus datos crudos en el
+entorno de un tercero, que es exactamente la cesión que se quería evitar. El aprendizaje federado
+invierte el planteamiento: lo que circula son los parámetros, y el dato permanece en origen.
+
+A ello se añade una consideración práctica en el escenario de competidores directos. Un
+\emph{clean room} exige acordar quién lo opera, con qué garantías y bajo qué contrato; el consenso
+sobre ese tercero es a menudo el verdadero obstáculo. En un esquema federado el coordinador no
+custodia datos, lo que reduce el nivel de confianza requerido, e incluso puede rotarse entre los
+participantes.
+
+\subsection{Matización necesaria}
+
+Sería incorrecto presentar ambos enfoques como rivales excluyentes, y este trabajo no lo hace. Son
+primitivos distintos para problemas distintos, y de hecho convergen: los \emph{clean rooms}
+incorporan cada vez más capacidades de cómputo, y las implantaciones federadas se apoyan en
+tecnologías —agregación segura, entornos de ejecución confiables— que también sustentan a los
+\emph{clean rooms}.
+
+La conclusión defendible es más acotada: para la tarea concreta de \emph{entrenar un modelo de
+previsión de demanda entre operadores que no se ceden datos}, el aprendizaje federado es el
+primitivo adecuado, mientras que un \emph{clean room} resolvería bien el análisis conjunto de datos
+que ya existen pero no evitaría la cesión que aquí se pretende eludir. Fuera de esa tarea, la
+comparación se decantaría con frecuencia del lado contrario, sobre todo si se pondera la madurez de
+las herramientas disponibles.
+
+Por último, debe recordarse la advertencia regulatoria expuesta en el \cref{cap:estado_arte}: el
+aprendizaje federado reduce la exposición pero no anonimiza por sí solo \parencite{aepdedps2025}. La
+ventaja que aquí se defiende es la de no ceder datos crudos, no la de eliminar todo riesgo sobre la
+información.

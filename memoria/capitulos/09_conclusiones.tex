@@ -1,4 +1,110 @@
 \chapter{Conclusiones y líneas futuras}
 \label{cap:conclusiones}
 
-Pendiente de redacción.
+\section{Respuesta a las preguntas de investigación}
+
+\subsection*{RQ1 — ¿Mejora el modelo federado al local y se aproxima al centralizado?}
+
+La respuesta es doble y ninguna de sus dos mitades coincide con la hipótesis de partida.
+
+El modelo federado \emph{sin personalizar} \textbf{no} mejora al local: con un WMAPE de 0,1507
+frente a 0,1476, es significativamente peor, y la diferencia es muy consistente entre series. Solo
+al añadir un ajuste fino por tienda el esquema federado se convierte en la mejor de las cinco
+condiciones, con 0,1379.
+
+En cuanto a la aproximación al centralizado, la pregunta resulta estar mal planteada para este
+conjunto de datos: el modelo centralizado no es el techo de rendimiento que la formulación
+presupone, sino el peor de los cinco. La ordenación observada, A $<$ B $<$ C, indica que agregar
+datos de tiendas heterogéneas en un único modelo de capacidad limitada degrada el resultado en
+lugar de mejorarlo. En consecuencia, la métrica de «porcentaje de brecha recuperada» que se había
+previsto como indicador principal carece de sentido aquí, porque su premisa no se cumple. La
+afirmación correcta es más fuerte que la prevista: el esquema federado con personalización supera
+tanto al local como al centralizado.
+
+\subsection*{RQ2 — ¿Supera el federado a los métodos convencionales?}
+
+Solo parcialmente. La condición E supera con claridad a la persistencia, al estacional y al
+suavizado exponencial. Frente a la media móvil de cuatro semanas la ventaja existe pero es mínima:
+sobre las series comunes es estadísticamente significativa, con un tamaño de efecto del 0,74\,\%.
+Y frente a un LightGBM global entrenado sobre datos agrupados, el esquema federado \textbf{pierde}
+por un 3,95\,\%, diferencia que el contraste confirma como real.
+
+La conclusión honesta es que el aprendizaje federado no es superior a los mejores métodos no
+federados en este problema. Su interés no reside en la precisión absoluta sino en que alcanza un
+rendimiento comparable \emph{sin necesidad de centralizar los datos}, que es justamente lo que los
+métodos que lo superan sí requieren.
+
+\subsection*{RQ3 — ¿Qué valor económico genera?}
+
+Ponderando por volumen, la colaboración federada con personalización reduce el error de previsión
+un 16,50\,\% respecto a que cada tienda entrene en solitario, lo que supone evitar 807.857 unidades
+de error en ocho semanas. Traducido con parámetros de sector, el ahorro anual estimado para la red
+de 54 tiendas se sitúa entre 0,5 y 3,9 millones de euros, con un escenario central en torno a 1,8
+millones, del orden de 35.000\,€ por tienda y año.
+
+Ese beneficio, sin embargo, no es uniforme: se concentra en las series de mayor volumen —las 50
+primeras explican el 84,6\,\% del total— y casi la mitad de las series empeoran. Una implantación
+real debería seleccionar por serie, sobre validación, entre el modelo personalizado y el local.
+
+\subsection*{RQ4 — ¿Por qué federado y no un \emph{data clean room}?}
+
+Porque resuelven tareas distintas. Un \emph{clean room} está diseñado para consultar datos que ya
+existen dentro de un entorno operado por un tercero, lo que exige que los participantes depositen
+en él sus datos crudos. El problema aquí es entrenar un modelo predictivo, y el aprendizaje
+federado lo consigue haciendo circular parámetros en lugar de datos. La conclusión se limita
+deliberadamente a esta tarea: fuera de ella, y ponderando la madurez de las herramientas, la
+comparación se decantaría con frecuencia del lado contrario.
+
+\subsection*{RQ5 — ¿Cuál es el coste en precisión de la privacidad diferencial?}
+
+Esta pregunta queda abierta. No se abordó experimentalmente, y es la línea de continuación más
+relevante del trabajo por la razón expuesta en el \cref{cap:discusion}: los organismos reguladores
+advierten de que los parámetros intercambiados pueden seguir constituyendo datos personales, de modo
+que sin garantías formales el esquema reduce la exposición pero no anonimiza.
+
+\section{Conclusiones generales}
+
+Más allá de las respuestas concretas, el trabajo deja tres conclusiones de alcance más general.
+
+La primera es que \textbf{la personalización no es un añadido opcional al aprendizaje federado sino
+la pieza que lo hace funcionar} en presencia de heterogeneidad. El modelo global federado, tomado
+aisladamente, no llegaba siquiera al modelo local.
+
+La segunda es que \textbf{más datos no implican mejor modelo si la capacidad del modelo no acompaña}.
+La degradación monótona al centralizar es el resultado más contraintuitivo del estudio, y el hecho
+de que un LightGBM global sí saque partido de esos mismos datos agregados apunta a que el problema
+está en el reparto de capacidad y no en la agregación.
+
+La tercera es metodológica: \textbf{optimizar los hiperparámetros de una etapa aislada puede
+perjudicar a la siguiente}. Un ajuste que mejoró el modelo federado en un 7\,\% empeoró la
+personalización posterior, con toda probabilidad por sobreajuste de una arquitectura mayor sobre los
+conjuntos pequeños del ajuste por tienda.
+
+\section{Líneas futuras}
+
+\begin{enumerate}
+  \item \textbf{Privacidad diferencial y agregación segura} (RQ5), midiendo la curva de coste en
+    precisión frente al presupuesto de privacidad. Es el paso necesario para poder sostener
+    afirmaciones de anonimización.
+
+  \item \textbf{Selección por serie entre modelo personalizado y local}, decidida sobre validación.
+    El análisis de robustez sugiere que capturaría el beneficio de las series que mejoran evitando
+    el perjuicio de las que empeoran.
+
+  \item \textbf{Ajuste de hiperparámetros específico de la etapa de personalización}, con una
+    arquitectura más contenida que la óptima para el entrenamiento federado.
+
+  \item \textbf{Validación con varios orígenes de previsión}, desplazando la ventana temporal, para
+    obtener estimaciones más estables que las de un único corte de ocho semanas.
+
+  \item \textbf{Agrupación de participantes antes de federar}, en la línea de
+    \textcite{long2025pacfl}, como alternativa intermedia entre un modelo global y la
+    personalización individual.
+
+  \item \textbf{Federación de modelos basados en árboles}, que en este problema son los más
+    precisos y que no admiten el promediado de parámetros de FedAvg, lo que exigiría esquemas
+    distintos.
+
+  \item \textbf{Evaluación sobre datos de operadores realmente distintos}, que es la limitación de
+    fondo del estudio y la que más condicionaría sus conclusiones.
+\end{enumerate}

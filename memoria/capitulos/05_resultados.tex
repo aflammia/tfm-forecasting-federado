@@ -1,4 +1,281 @@
 \chapter{Resultados}
 \label{cap:resultados}
 
-Pendiente de redacción.
+Todos los resultados de este capítulo se refieren al conjunto de prueba —las ocho últimas semanas
+del histórico—, que no interviene en ningún momento del ajuste ni de la selección de modelos. Las
+métricas se agregan por la mediana de las series, y la cobertura indica la proporción de series
+para las que el método produce una previsión.
+
+\section{Comparación general}
+
+La \cref{tab:comparativa} recoge el rendimiento de los trece métodos evaluados y la
+\cref{fig:comparativa} los ordena visualmente.
+
+\begin{table}[H]
+  \centering
+  \caption[Comparación de los métodos evaluados]{Rendimiento en el conjunto de prueba de los
+  métodos evaluados, ordenados por WMAPE. Las tres métricas se agregan por la mediana de las
+  series.}
+  \label{tab:comparativa}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Método & WMAPE & MASE & RMSSE & Cobertura \\
+    \midrule
+    LightGBM global                    & 0,1320 & 0,7749 & 0,6300 & 100,0\,\% \\
+    Media móvil (4 sem.)               & 0,1379 & 0,8672 & 0,7023 & 99,1\,\% \\
+    \textbf{E — Federado + person.}    & \textbf{0,1379} & 0,9019 & 0,7234 & 98,1\,\% \\
+    A — Local                          & 0,1476 & 0,9283 & 0,7501 & 98,1\,\% \\
+    \textbf{D — Federado (FedAvg)}     & \textbf{0,1507} & 1,0100 & 0,7966 & 100,0\,\% \\
+    Persistencia ($t-1$)               & 0,1584 & 0,9742 & 0,8025 & 99,8\,\% \\
+    B — Centralizado por silo          & 0,1676 & 1,0423 & 0,8256 & 100,0\,\% \\
+    C — Centralizado global            & 0,1736 & 1,1317 & 0,8832 & 100,0\,\% \\
+    Estacional ($t-52$)                & 0,2296 & 1,2684 & 1,0215 & 98,1\,\% \\
+    ETS/Holt-Winters                   & 0,3344 & 1,4553 & 1,1883 & 95,2\,\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{resultados_comparativa_metodos.png}
+  \caption[Comparación de métodos por WMAPE]{Los métodos evaluados ordenados por WMAPE en el
+  conjunto de prueba. Las condiciones federadas se destacan en azul y el mejor método no federado,
+  en naranja.}
+  \label{fig:comparativa}
+\end{figure}
+
+Tres lecturas se desprenden de inmediato. La primera es que el mejor método del estudio no es
+ninguna de las condiciones federadas, sino un LightGBM global entrenado sobre los datos agrupados
+de todas las tiendas. La segunda es que la media móvil de cuatro semanas, el más simple de los
+métodos evaluados, iguala en mediana a la mejor condición federada; esta coincidencia se examina en
+detalle en la \cref{sec:contraste}, porque el contraste pareado matiza la aparente igualdad. La
+tercera es que el suavizado exponencial queda muy por detrás del resto, un resultado esperable en
+series con demanda intermitente y ceros estructurales.
+
+\section{Las cinco condiciones experimentales}
+
+Aislando las cinco condiciones del diseño experimental se obtiene una ordenación que contradice la
+hipótesis de partida:
+
+\begin{center}
+\begin{tabular}{lcl}
+  C — Centralizado global      & 0,1736 & \\
+  B — Centralizado por silo    & 0,1676 & \\
+  A — Local                    & 0,1476 & \\
+  D — Federado                 & 0,1507 & \\
+  E — Federado + personalización & 0,1379 & \\
+\end{tabular}
+\end{center}
+
+El resultado más llamativo es que \textbf{el rendimiento empeora de forma monótona a medida que se
+centralizan más datos}: el modelo global (C), que dispone de aproximadamente 54 veces más datos de
+entrenamiento que cualquier modelo local, es el peor de los cinco. Se comprobó que no se trata de
+un problema de entrenamiento insuficiente: aumentar la paciencia de la parada temprana en el silo
+de mayor tamaño solo produce sobreajuste, con la pérdida de validación alcanzando el mismo mínimo y
+subiendo después.
+
+El segundo resultado relevante es que el modelo federado por sí solo (D, 0,1507) no alcanza al
+modelo local (A, 0,1476). Es la personalización posterior (E, 0,1379) la que convierte al esquema
+federado en la mejor de las cinco condiciones. Dicho de otro modo: en este problema, federar sin
+personalizar no compensa.
+
+La \cref{fig:distribucion} muestra que estas diferencias de mediana conviven con una dispersión
+considerable entre series, lo que anticipa que la mejora no es uniforme.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{resultados_distribucion_por_serie.png}
+  \caption[Distribución del error por serie]{Distribución del WMAPE por serie. Las cajas abarcan el
+  rango intercuartílico y la línea interior es la mediana; los bigotes se recortan en el eje para
+  conservar la legibilidad de la zona informativa. La diferencia entre condiciones es pequeña
+  frente a la variabilidad entre series.}
+  \label{fig:distribucion}
+\end{figure}
+
+\subsection{Convergencia del entrenamiento federado}
+
+La \cref{fig:convergencia} muestra la evolución de la pérdida de validación a lo largo de las
+rondas para cuatro configuraciones federadas. La convergencia es muy rápida: el grueso del
+aprendizaje se produce en las dos o tres primeras rondas, y a partir de ahí la pérdida oscila sin
+mejorar de forma sostenida. Esto tiene una consecuencia práctica favorable, ya que el coste de
+comunicación —proporcional al número de rondas— es bajo.
+
+Se observa también que aumentar el número de épocas locales por ronda perjudica: con tres épocas la
+pérdida se vuelve visiblemente más inestable. La explicación es coherente con la teoría del método:
+cuantas más épocas locales, más se alejan los modelos de cada silo entre sincronizaciones, y más
+daño hace el promediado posterior.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{resultados_convergencia_federada.png}
+  \caption[Convergencia del entrenamiento federado]{Pérdida de validación centralizada por ronda
+  para cuatro configuraciones. Se omite la ronda 0, que corresponde a la inicialización aleatoria y
+  comprimiría la escala. El aprendizaje se concentra en las primeras rondas.}
+  \label{fig:convergencia}
+\end{figure}
+
+\section{Contraste estadístico}
+\label{sec:contraste}
+
+Las diferencias anteriores se contrastan mediante el test de Wilcoxon pareado por serie, con
+corrección de Holm-Bonferroni para las ocho comparaciones. La \cref{tab:significancia} y la
+\cref{fig:significancia} recogen los resultados. Todos los contrastes resultan significativos al
+nivel del 5\,\% incluso después de la corrección.
+
+\begin{table}[H]
+  \centering
+  \caption[Contraste de Wilcoxon entre métodos]{Contraste de Wilcoxon de rangos con signo, pareado
+  por serie sobre el WMAPE en prueba. $\Delta$ es la variación de la mediana del segundo método
+  respecto al primero; un valor negativo indica que el segundo método es mejor. Los p-valores
+  incorporan la corrección de Holm-Bonferroni.}
+  \label{tab:significancia}
+  \begin{tabular}{lrrl}
+    \toprule
+    Contraste & $n$ & $\Delta$ & $p$ (Holm) \\
+    \midrule
+    A — Local \emph{vs} C — Centralizado global      & 1.655 & $+17{,}64\,\%$ & $4{,}2\cdot10^{-61}$ \\
+    A — Local \emph{vs} B — Centralizado por silo    & 1.655 & $+12{,}29\,\%$ & $1{,}6\cdot10^{-23}$ \\
+    A — Local \emph{vs} D — Federado                 & 1.655 & $+1{,}89\,\%$  & $8{,}0\cdot10^{-22}$ \\
+    E \emph{vs} Media móvil                          & 1.655 & $+0{,}74\,\%$  & $1{,}6\cdot10^{-3}$ \\
+    E \emph{vs} LightGBM global                      & 1.655 & $-3{,}95\,\%$  & $1{,}5\cdot10^{-47}$ \\
+    A — Local \emph{vs} E — Federado + person.       & 1.655 & $-6{,}57\,\%$  & $3{,}5\cdot10^{-2}$ \\
+    D — Federado \emph{vs} E — Federado + person.    & 1.655 & $-8{,}31\,\%$  & $3{,}9\cdot10^{-47}$ \\
+    C — Centralizado global \emph{vs} D — Federado   & 1.686 & $-13{,}21\,\%$ & $2{,}4\cdot10^{-34}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{resultados_significancia.png}
+  \caption[Tamaño de efecto y significación de los contrastes]{Variación de la mediana del WMAPE
+  en cada contraste, con el p-valor corregido. Todos los contrastes son significativos, pero los
+  tamaños de efecto varían en un orden de magnitud.}
+  \label{fig:significancia}
+\end{figure}
+
+Cuatro conclusiones se derivan del contraste:
+
+\begin{enumerate}
+  \item \textbf{La escalera de centralización es real.} Que B y C sean peores que A no es una
+    fluctuación: son los dos contrastes con los p-valores más pequeños de todo el estudio.
+
+  \item \textbf{El federado sin personalizar es significativamente peor que el local.} La
+    diferencia entre A y D, aunque modesta en magnitud ($+1{,}89\,\%$), es muy consistente entre
+    series.
+
+  \item \textbf{La personalización es lo que hace competitivo al federado.} El contraste D \emph{vs}
+    E combina un tamaño de efecto apreciable ($-8{,}31\,\%$) con una significación muy alta.
+
+  \item \textbf{El valor de colaborar es real, pero es el efecto más débil.} El contraste A
+    \emph{vs} E, que es el que sustenta el análisis económico del \cref{cap:negocio}, mejora un
+    $6{,}57\,\%$ y resulta significativo, pero con $p = 0{,}035$ queda apenas por debajo del umbral
+    tras la corrección. Es, con diferencia, el contraste menos robusto de los ocho, y así debe
+    interpretarse.
+\end{enumerate}
+
+Merece una nota aparte la comparación entre E y la media móvil. En las medianas globales de la
+\cref{tab:comparativa} ambos métodos dan 0,1379, lo que sugiere un empate. Sin embargo, esas
+medianas se calculan sobre conjuntos de series distintos, ya que la cobertura de ambos métodos no
+coincide. Sobre las 1.655 series \emph{comunes}, que es lo que compara el test pareado, la
+condición E resulta mejor de forma estadísticamente significativa, si bien el tamaño del efecto es
+pequeño ($0{,}74\,\%$). El test pareado es la comparación metodológicamente correcta, y así se
+adopta aquí.
+
+Por el contrario, la ventaja de LightGBM sobre la mejor condición federada —un $3{,}95\,\%$— no
+puede atribuirse al azar en modo alguno.
+
+\section{Ajuste de hiperparámetros}
+
+Ninguna de las condiciones A–E había pasado por un ajuste de hiperparámetros propio, a diferencia
+del LightGBM de referencia. Para descartar que la desventaja del esquema federado se debiera
+simplemente a esa asimetría, se realizó una búsqueda aleatoria de arquitectura y parámetros de
+optimización sobre un proxy rápido: un único entrenamiento sobre los datos agrupados, seleccionando
+por WMAPE en validación.
+
+La búsqueda encontró una configuración claramente mejor que la original en ese proxy —0,1093 frente
+a 0,1880, una mejora del 41,9\,\%—, con una red más ancha, tasa de aprendizaje mayor y menos
+regularización (\cref{fig:tuning}).
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\textwidth]{resultados_tuning_arquitectura.png}
+  \caption[Búsqueda de arquitectura]{Resultado de la búsqueda aleatoria de arquitectura sobre el
+  proxy agrupado. El primer candidato evaluado es siempre la arquitectura original, para disponer de
+  una comparación limpia.}
+  \label{fig:tuning}
+\end{figure}
+
+Esa mejora se trasladó parcialmente a la condición federada: con la nueva arquitectura, la mejor
+configuración de D pasó de 0,1507 a 0,1402, una mejora de aproximadamente el 7\,\% confirmada en el
+conjunto de prueba. Se observó además que con la tasa de aprendizaje más alta, tres épocas locales
+por ronda degradan gravemente el resultado (0,2786), lo que refuerza la lectura de la
+\cref{fig:convergencia}.
+
+Sin embargo, esa mejora \textbf{no se propagó a la condición E}. Ninguna de las tres variantes de
+personalización probadas sobre el modelo D mejorado —ajuste fino completo, ajuste con tasa de
+aprendizaje reducida y ajuste al estilo de FedPer congelando las capas compartidas— superó al
+resultado original: la mejor de ellas obtuvo 0,1446 frente a los 0,1379 de la configuración
+original. La interpretación de este resultado se aborda en el \cref{cap:discusion}.
+
+Se evaluó por último una corrección del sesgo de retransformación que introduce el uso de la escala
+logarítmica, mediante el estimador de \emph{smearing} \parencite{duan1983}, calculado por tienda. El
+resultado fue muy desfavorable: el WMAPE pasó de 0,1446 a 0,8876. El diagnóstico es que con apenas
+unos cientos de filas de entrenamiento por tienda, el factor de corrección —una media de
+exponenciales de los residuos— resulta extremadamente sensible a los valores atípicos, y llegó a
+alcanzar valores de 7,41 en algunas tiendas cuando debería situarse próximo a la unidad. La
+corrección se descartó.
+
+\section{Despliegue distribuido}
+
+Los resultados anteriores se obtuvieron con el motor de simulación de Flower, que representa a los
+tres silos como procesos dentro de una misma máquina. Para verificar que el esquema funciona sobre
+infraestructura realmente distribuida, se desplegó el sistema sobre tres máquinas virtuales
+independientes en Microsoft Azure, según el esquema de la \cref{fig:azure}.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      vm/.style={draw,rounded corners,minimum width=3.3cm,minimum height=1.35cm,
+                 align=center,font=\footnotesize},
+      >={Stealth[round]}]
+    \node[vm,fill=black!5] (g) {\textbf{vm-silo-grande}\\{\scriptsize silo Grande + agregador}\\
+      {\scriptsize solo \texttt{grande.parquet}}};
+    \node[vm,below left=1.5cm and 0.5cm of g] (m) {\textbf{vm-silo-mediano}\\
+      {\scriptsize solo \texttt{mediano.parquet}}};
+    \node[vm,below right=1.5cm and 0.5cm of g] (p) {\textbf{vm-silo-pequeno}\\
+      {\scriptsize solo \texttt{pequeno.parquet}}};
+    \draw[<->,black!60] (g) -- node[sloped,above,font=\scriptsize] {gRPC} (m);
+    \draw[<->,black!60] (g) -- node[sloped,above,font=\scriptsize] {gRPC} (p);
+    \node[draw,dashed,rounded corners,right=1.2cm of g,minimum width=2.6cm,
+          minimum height=1.0cm,align=center,font=\footnotesize] (aml)
+      {Azure ML\\{\scriptsize métricas y registro}};
+    \draw[->,black!45] (g) -- (aml);
+    \begin{scope}[on background layer]
+      \node[draw=black!25,dashed,rounded corners,fit=(g)(m)(p),inner sep=0.35cm] (vnet) {};
+    \end{scope}
+    \node[font=\scriptsize,text=black!55,below=0.1cm of vnet] {red privada virtual};
+  \end{tikzpicture}
+  \caption[Despliegue distribuido en Azure]{Arquitectura del despliegue. Cada máquina contiene
+  únicamente el conjunto de datos de su silo; el agregador se aloja en una de ellas y solo maneja
+  parámetros y un conjunto de validación de referencia.}
+  \label{fig:azure}
+\end{figure}
+
+El despliegue exigió pasar del motor de simulación al motor de despliegue de Flower, con un
+coordinador y tres nodos comunicándose por gRPC. Antes de provisionar la infraestructura se
+verificó que la nueva aplicación reproducía la trayectoria de pérdida por ronda del código de
+simulación, de modo que cualquier diferencia posterior fuera atribuible a la infraestructura y no
+al algoritmo.
+
+El aislamiento de datos se comprobó de forma directa: en cada máquina de silo, el directorio de
+datos contiene exclusivamente el fichero de ese silo. La federación completó tanto una corrida de
+FedAvg como una de FedProx, y la pérdida de validación evolucionó desde aproximadamente 4,9 en la
+inicialización aleatoria hasta el entorno de 0,05 hacia la tercera o quinta ronda, la misma
+trayectoria observada en simulación. El modelo global resultante quedó registrado en el registro de
+modelos de Azure ML, con la mejor ronda en la número 7.
+
+Este ejercicio no busca mejorar la precisión —el algoritmo es el mismo—, sino demostrar que el
+esquema es implantable sobre infraestructura real con aislamiento efectivo de los datos. Las
+dificultades encontradas durante el despliegue, que resultan informativas por sí mismas, se recogen
+en el \cref{cap:anexos}.

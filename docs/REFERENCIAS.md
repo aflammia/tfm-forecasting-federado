@@ -99,6 +99,33 @@ https://www.digitalapplied.com/blog/data-clean-rooms-advertising-2026-marketer-d
 
 ---
 
+## Privacidad y marco regulatorio (RQ4)
+
+**Agencia Española de Protección de Datos, & Supervisor Europeo de Protección de Datos. (2025).**
+TechDispatch: Aprendizaje federado (n.º 1). AEPD y EDPS.
+https://www.aepd.es/guias/tech-dispatch-aprendizaje-federado.pdf
+
+> Informe conjunto del regulador español y el europeo dedicado específicamente al aprendizaje
+> federado. Verificado descargando el documento original. Reconoce sus beneficios (menor
+> concentración de datos, minimización, protección desde el diseño) pero advierte de que **los
+> parámetros del modelo intercambiados pueden seguir siendo datos personales**, por ser vulnerables
+> a ataques de inferencia, de pertenencia y de inversión del modelo; concluye que el FL no basta por
+> sí solo como anonimización y recomienda complementarlo con privacidad diferencial o agregación
+> segura. Es la fuente que delimita el alcance de las afirmaciones de privacidad de la memoria y la
+> que fundamenta que RQ5 quede como línea futura. Citado por primera vez: Sesión 32.
+
+**IAB Tech Lab. (2024).** Data clean rooms: Guidance and recommended practices (Versión 1.0). IAB
+Technology Laboratory. https://iabtechlab.com/datacleanrooms/
+
+> Guía de referencia del sector sobre data clean rooms, verificada en la página oficial del
+> estándar. Sistematiza principios, funciones y limitaciones, y acota sus casos de uso a tres
+> ámbitos publicitarios: activación de audiencias, enriquecimiento de datos de consumidor y
+> medición/optimización de campañas. Sostiene el argumento central de RQ4: los clean rooms están
+> diseñados para consultar datos existentes, no para entrenar modelos predictivos entre partes.
+> Citado por primera vez: Sesión 32.
+
+---
+
 ## Datasets
 
 **Kaggle. (s.f.).** Store Sales - Time Series Forecasting [Conjunto de datos]. Kaggle.

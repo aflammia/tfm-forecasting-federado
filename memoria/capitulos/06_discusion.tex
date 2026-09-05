@@ -1,4 +1,136 @@
 \chapter{Discusión}
 \label{cap:discusion}
 
-Pendiente de redacción.
+\section{Por qué centralizar empeora el modelo}
+
+El resultado que más se aparta de la intuición es la ordenación A $<$ B $<$ C: cuantos más datos se
+agregan en un único modelo, peor predice. Conviene subrayar que no es un problema de
+subentrenamiento, ya que se descartó explícitamente aumentando la paciencia de la parada temprana
+sin obtener mejora alguna.
+
+La explicación coherente con lo observado en los datos es la heterogeneidad entre tiendas. Como se
+describió en el \cref{cap:materiales}, los silos difieren sobre todo en escala de venta —con
+factores de dos a tres— y en intensidad promocional. Un modelo único con capacidad limitada
+—4.985 parámetros— debe repartir esa capacidad entre comportamientos que no son intercambiables, y
+acaba aprendiendo un compromiso que no sirve bien a ninguno. El modelo local, en cambio, dedica
+toda su capacidad a una única tienda.
+
+Este razonamiento sugiere que la ordenación observada no es una propiedad universal, sino el
+resultado de la relación entre la capacidad del modelo, el volumen de datos por entidad y el grado
+de heterogeneidad. Un modelo con mucha mayor capacidad podría absorber la heterogeneidad en lugar de
+promediarla. De hecho, el LightGBM global —que es precisamente un modelo global sobre datos
+agrupados— es el mejor método del estudio, lo que apoya esa lectura: no es la agregación de datos lo
+que perjudica, sino la agregación con un modelo cuya capacidad no da para representar las
+diferencias.
+
+\section{Por qué el federado necesita personalización}
+
+La condición D hereda el problema de C: FedAvg construye un modelo único para todos los
+participantes, y por tanto está sujeto a la misma tensión. Que D (0,1507) resulte mejor que C
+(0,1736) pero peor que A (0,1476) encaja bien en esa lectura. El promediado federado actúa como una
+regularización que impide que el modelo se especialice en ningún silo, lo que lo protege frente al
+compromiso extremo de C pero no lo hace competitivo frente a un modelo dedicado.
+
+La personalización resuelve exactamente esa carencia: parte de un punto de inicio que ya ha
+capturado la estructura compartida entre silos —estacionalidad, efecto de festivos, comportamiento
+de las familias— y dedica un ajuste corto a las particularidades de cada tienda. El contraste D
+\emph{vs} E, que es uno de los más fuertes del estudio, confirma que ese es el mecanismo que hace
+funcionar al esquema.
+
+Esta observación coincide con la motivación de FedPer \parencite{arivazhagan2019} y con la línea de
+trabajo de \textcite{long2025pacfl}, que también renuncian al modelo único cuando los participantes
+son suficientemente distintos.
+
+\section{Por qué el ajuste de hiperparámetros no se propagó}
+
+El ajuste de arquitectura mejoró de forma clara el proxy agrupado y la condición D, pero perjudicó a
+la condición E. La hipótesis más consistente con el diseño del experimento es un desajuste entre la
+capacidad del modelo y el volumen de datos disponible en cada etapa del proceso.
+
+La arquitectura ganadora es sensiblemente más ancha que la original. Esa capacidad adicional es
+provechosa mientras el modelo se entrena con las cerca de 294.000 filas agregadas de los tres silos,
+que es el caso del proxy y del entrenamiento federado. En la etapa de personalización, en cambio,
+cada modelo se ajusta con apenas unos cientos de filas de una única tienda, y una red más ancha
+sobreajusta con más facilidad. El ajuste óptimo para una etapa resulta así perjudicial para la
+siguiente.
+
+La consecuencia metodológica es que en un proceso por etapas los hiperparámetros no deberían
+optimizarse de forma aislada sobre una sola de ellas. Una búsqueda específica y más contenida para
+la etapa de personalización es una línea natural de continuación que este trabajo no ha explorado.
+
+\section{Por qué falló la corrección de sesgo}
+
+El fracaso de la corrección de \emph{smearing} tiene una explicación estadística directa. El factor
+de Duan es la media de la exponencial de los residuos; la exponencial amplifica de forma
+desproporcionada los residuos grandes, de modo que con muestras pequeñas unos pocos valores atípicos
+bastan para disparar el factor. Al calcularlo por tienda, sobre unos cientos de observaciones, la
+estimación resultó inestable, con valores hasta 7,41 cuando lo esperable en un modelo bien calibrado
+es un valor próximo a uno.
+
+La corrección no es errónea como concepto —el sesgo de retransformación que pretende corregir es
+real—, sino que fue mal aplicada al estimarla sobre muestras demasiado pequeñas. Calcular un factor
+único global sobre el conjunto agregado promediaría mejor los atípicos y es una posibilidad
+razonable, que se deja anotada como trabajo futuro sin afirmar que vaya a funcionar.
+
+\section{El federado frente a los métodos no federados}
+
+El resultado más incómodo para la tesis del trabajo es que el mejor método sigue siendo un LightGBM
+global, con una ventaja de casi el 4\,\% que el contraste estadístico confirma como real. Dos
+consideraciones matizan su alcance sin negarlo.
+
+La primera es de aplicabilidad. El LightGBM global requiere reunir los datos crudos de todas las
+tiendas en un mismo lugar. Dentro de una cadena eso es viable, y en ese caso la recomendación de
+este trabajo sería usar LightGBM y no un esquema federado. Entre operadores que compiten, que es el
+escenario que motiva el trabajo, esa opción no está sobre la mesa; la comparación pertinente pasa a
+ser entonces con la condición A, que es lo que cada operador podría hacer en solitario.
+
+La segunda es de naturaleza del modelo. Los árboles potenciados por gradiente siguen siendo muy
+competitivos en datos tabulares, y además no se prestan al promediado de parámetros en que se basa
+FedAvg: no existe una operación equivalente a promediar pesos entre dos conjuntos de árboles. Federar
+un modelo de esa familia exigiría esquemas distintos, lo que constituye una limitación estructural
+del enfoque y no un defecto de la implementación.
+
+Conviene también situar el resultado frente a la literatura: la observación de
+\textcite{petropoulos2024} de que los métodos sencillos son sorprendentemente competitivos en
+previsión minorista se ve confirmada aquí de forma clara, ya que una media móvil de cuatro semanas
+compite de tú a tú con toda la maquinaria federada.
+
+\section{Limitaciones}
+
+\subsection{Los silos no son operadores competidores reales}
+
+La limitación más importante del estudio es que los tres silos son formatos de tienda de una misma
+cadena, no empresas distintas. Se trata de la metodología estándar del campo, ya que no existen
+conjuntos de datos públicos con ventas de cadenas competidoras, y es la misma que emplean los
+trabajos de referencia en el área. Pero implica que la heterogeneidad reproducida, aunque real, es
+probablemente menor que la que existiría entre operadores distintos, con políticas de surtido,
+precios y promociones propias. Cabe esperar que en un escenario real la ventaja de la
+personalización fuera mayor y la del modelo global menor, pero es una expectativa razonada, no un
+resultado medido.
+
+\subsection{Ausencia de precios y de márgenes}
+
+El conjunto de datos expresa las ventas en unidades y no contiene precios ni márgenes. Esto obliga a
+que toda la traducción económica del \cref{cap:negocio} descanse en parámetros externos, y explica
+que sus resultados se presenten como rangos y no como cifras puntuales. Además, algunas familias se
+venden por peso, de modo que la magnitud «unidad» no es homogénea entre categorías.
+
+\subsection{Alcance temporal y de validación}
+
+La evaluación se realiza sobre un único horizonte de ocho semanas y un único corte temporal. Una
+validación con varios orígenes de previsión —desplazando repetidamente la ventana— daría una
+estimación más estable de las diferencias, y es una mejora natural que este trabajo no incorpora.
+
+\subsection{Privacidad}
+
+El esquema implementado protege los datos en el sentido de que estos no abandonan el silo, lo que se
+verificó de forma efectiva en el despliegue distribuido. No incorpora, sin embargo, garantías
+formales de privacidad. Como advierten la AEPD y el EDPS \parencite{aepdedps2025}, los parámetros
+intercambiados pueden seguir siendo datos personales y ser vulnerables a ataques de inferencia, por
+lo que el aprendizaje federado por sí solo no constituye una medida de anonimización. Las
+afirmaciones de este trabajo sobre privacidad deben entenderse limitadas a la no cesión de datos
+crudos. Añadir privacidad diferencial o agregación segura, y medir su coste en precisión, es la
+pregunta RQ5 que queda abierta.
+
+Por último, el despliegue en la nube se realizó sin cifrado del canal entre los nodos, al discurrir
+el tráfico por una red privada virtual. Un despliegue en producción debería habilitarlo.

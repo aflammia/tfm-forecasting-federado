@@ -2354,6 +2354,114 @@ PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/22_significancia.py
 
 ---
 
+## Sesión 32 — Fase 4b (RQ3 y RQ4) y redacción de la memoria del TFM
+
+**Fecha:** 2026-09-05
+**Scripts nuevos:** `src/23_valor_negocio.py`, `src/24_figuras_memoria.py`
+**Carpeta nueva:** `memoria/` (LaTeX: `main.tex`, `preambulo.tex`, `portada.tex`, `bibliografia.bib`,
+`compilar.sh`, `capitulos/*.tex`, `figuras/`)
+**Objetivo:** cerrar las dos preguntas de negocio pendientes y redactar la memoria completa para
+enviar un borrador a la tutora.
+
+### RQ3 — Valor económico
+
+El modelo separa deliberadamente **la parte física de la monetaria**, porque el dataset es público y
+no contiene precios ni márgenes: las ventas están en unidades. La parte física sale íntegramente de
+nuestros resultados; la monetaria usa parámetros de sector y se presenta siempre como rango.
+
+**Agregación ponderada por volumen, no por mediana.** El dinero sigue al volumen, así que el error
+se agrega como suma de unidades de error sobre suma de unidades vendidas. Resultado sobre las 1.655
+series comunes a A y E (46,0 M de unidades vendidas en las 8 semanas de test):
+
+| Magnitud | Valor |
+|---|---|
+| Error absoluto, Condición A | 4.896.201 unidades |
+| Error absoluto, Condición E | 4.088.345 unidades |
+| Unidades de error evitadas | **807.857** (8 semanas) |
+| WMAPE agregado A → E | 0,1064 → 0,0888 |
+| **Mejora relativa agregada** | **16,50 %** |
+| (referencia: mejora en la mediana por serie) | 6,57 % |
+
+La diferencia entre el 16,50 % agregado y el 6,57 % de la mediana es un hallazgo en sí mismo: la
+personalización mejora sobre todo en las series de mayor volumen.
+
+**Análisis de robustez (lo que impide sobrevender el resultado):**
+- Las 10 series con más ahorro aportan el 37,5 % del total; las 50 primeras, el 84,6 %.
+- **764 de 1.655 series (46,2 %) EMPEORAN con E respecto a A**, con un coste conjunto de 207.493
+  unidades ya descontado del neto.
+- El balance por tienda es positivo en 40 de 53.
+
+Esto encaja con que A vs E fuera el contraste más débil (Sesión 31, p=0,035). De aquí sale una
+recomendación operativa que se deja como trabajo futuro, no como resultado: **elegir por serie**,
+sobre validación, entre el modelo personalizado y el local.
+
+**Monetización (sensibilidad, nunca cifra única).** Parámetros recorridos: margen bruto 18-26 %
+(FMI/Kroger sitúan el del sector en 21-22 %), fracción del error que genera coste 20-50 %, y valor
+medio de la unidad 1-3 € (el parámetro más incierto, por ausencia de precios). Rango resultante:
+**0,53 M€ – 3,94 M€ al año** para las 54 tiendas; escenario central **1,84 M€/año** (~34.700 € por
+tienda). Contrastado con el presupuesto del proyecto (~16.700 €) y el coste de cómputo real del
+despliegue (<5 €), el cuello de botella para adoptar el esquema no es económico sino de gobierno
+del dato.
+
+### RQ4 — FL frente a data clean rooms
+
+Investigación con fuentes verificadas una a una antes de citarlas (convención del proyecto). Se
+descartaron los blogs de proveedor que ya había en `REFERENCIAS.md` como base del argumento y se
+apoyó en dos fuentes de primer nivel, ambas dadas de alta en APA:
+- **IAB Tech Lab (2024)**, guía de referencia del sector, que acota los casos de uso de los clean
+  rooms a tres ámbitos publicitarios (audiencias, enriquecimiento, medición).
+- **AEPD y EDPS (2025)**, informe conjunto sobre aprendizaje federado, que advierte de que **los
+  parámetros intercambiados pueden seguir siendo datos personales**.
+
+El argumento defendido es acotado a propósito: para *entrenar un modelo predictivo entre partes que
+no ceden datos*, el FL es el primitivo adecuado, porque un clean room exigiría depositar los datos
+crudos en el entorno de un tercero, que es justo lo que se quiere evitar. Fuera de esa tarea, y
+ponderando la madurez del tooling, la comparación se decantaría a menudo del lado contrario. La
+memoria lo dice así, sin presentarlos como excluyentes.
+
+La advertencia de la AEPD/EDPS obliga además a limitar las afirmaciones de privacidad del TFM a la
+no cesión de datos crudos, y convierte RQ5 (privacidad diferencial) en la línea futura más
+relevante.
+
+### Memoria
+
+Redactada en LaTeX siguiendo el estilo de los TFM de Tecnun que facilitó el autor (portada
+institucional, índices de contenido/figuras/tablas, citas APA con biblatex). **62 páginas, compila
+sin un solo aviso.** Nueve capítulos más anexos, 12 figuras (7 generadas desde los CSV por
+`24_figuras_memoria.py` y 5 diagramas vectoriales en TikZ) y 8 tablas.
+
+**Peculiaridades del entorno encontradas y resueltas** (documentadas en `memoria/compilar.sh`):
+- `latexmk` aborta al analizar una entrada rota del PATH de Windows (el stub de Python de la Store).
+- `pdflatex` **se cuelga indefinidamente si hereda una stdin abierta**; con `< /dev/null` termina.
+  Un pdflatex colgado bloquea además los auxiliares y hace fallar a `biber` con "Cannot find control
+  file", que fue una pista falsa que costó tiempo.
+- `siunitx` de la distribución es incompatible con el kernel instalado: se eliminó la dependencia y
+  se escriben las cifras con coma directamente.
+- `babel` en español activa `<` y `>` como abreviaturas y rompe TikZ: se resuelve con
+  `es-noshorthands`.
+
+### Nota metodológica sobre las figuras
+
+Se siguió el criterio de que la forma la elige el trabajo del dato y el color codifica función, no
+decora. Todas se revisaron visualmente una a una, lo que detectó cuatro defectos que no aparecen al
+mirar solo el código: solapes de etiquetas, la mediana de D tomada del subconjunto pareado en vez de
+la muestra completa, tildes perdidas por venir del CSV en ASCII, y separadores decimales con punto.
+
+### Salidas
+- `reports/valor_negocio.csv`, `valor_negocio_por_serie.csv`, `valor_negocio_resumen.json`
+- `memoria/main.pdf` (62 páginas) y sus fuentes
+- `docs/REFERENCIAS.md`: dos referencias nuevas verificadas (IAB Tech Lab; AEPD y EDPS)
+
+### Reproducibilidad
+```bash
+cd "C:/Users/alefl/OneDrive/Escritorio/tfm-forecasting-federado"
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/23_valor_negocio.py
+PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe src/24_figuras_memoria.py
+cd memoria && bash compilar.sh
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

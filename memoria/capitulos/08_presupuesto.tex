@@ -1,4 +1,108 @@
 \chapter{Presupuesto}
 \label{cap:presupuesto}
 
-Pendiente de redacción.
+Este capítulo recoge el coste del proyecto. Se trata de una estimación: las horas se han asignado
+por fases a partir del registro de trabajo del proyecto, y las tarifas corresponden a valores de
+mercado para perfiles junior de ciencia de datos.
+
+\section{Coste de personal}
+
+El proyecto lo ha desarrollado una sola persona. La \cref{tab:presupuesto_personal} distribuye la
+dedicación por fases.
+
+\begin{table}[H]
+  \centering
+  \caption[Coste de personal]{Dedicación estimada por fases y coste de personal asociado.}
+  \label{tab:presupuesto_personal}
+  \begin{tabular}{lrrr}
+    \toprule
+    Fase & Horas & Tarifa (€/h) & Coste (€) \\
+    \midrule
+    Revisión bibliográfica y diseño experimental   &  45 & 30 & 1.350 \\
+    Construcción del conjunto de datos             &  80 & 30 & 2.400 \\
+    Métodos de referencia y condiciones A--C       &  70 & 30 & 2.100 \\
+    Infraestructura federada y condiciones D--E    &  90 & 30 & 2.700 \\
+    Ajuste de hiperparámetros y contraste estadístico & 55 & 30 & 1.650 \\
+    Despliegue en la nube (MLOps)                  &  60 & 30 & 1.800 \\
+    Análisis de negocio                            &  30 & 30 &   900 \\
+    Redacción de la memoria                        &  70 & 30 & 2.100 \\
+    \midrule
+    \textbf{Total}                                 & \textbf{500} & & \textbf{15.000} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Coste de equipos}
+
+Se ha empleado un ordenador portátil personal. Se imputa la amortización correspondiente al periodo
+de uso del proyecto, seis meses, sobre una vida útil de cuatro años.
+
+\begin{table}[H]
+  \centering
+  \caption[Coste de equipos]{Amortización de los equipos empleados.}
+  \label{tab:presupuesto_equipos}
+  \begin{tabular}{lrrr}
+    \toprule
+    Concepto & Precio (€) & Amortización & Coste imputado (€) \\
+    \midrule
+    Ordenador portátil & 1.400 & 6/48 meses & 175 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Coste de software y servicios en la nube}
+
+La totalidad de las herramientas empleadas son de código abierto y sin coste de licencia: Python,
+PyTorch, Flower, LightGBM, \emph{scikit-learn}, pandas, DVC, Hydra, Streamlit y la distribución
+MiKTeX para la composición de esta memoria.
+
+El único coste de servicios corresponde al despliegue distribuido en Microsoft Azure. El gasto real
+del ejercicio fue inferior a 5\,€, gracias al uso de máquinas de la gama más económica y a la
+disciplina de detenerlas al terminar cada sesión. Se recoge en la
+\cref{tab:presupuesto_software} el coste real y, a título orientativo, el que tendría una
+operación continuada del sistema durante un mes.
+
+\begin{table}[H]
+  \centering
+  \caption[Coste de software y servicios]{Coste de software y de servicios en la nube.}
+  \label{tab:presupuesto_software}
+  \begin{tabular}{lr}
+    \toprule
+    Concepto & Coste (€) \\
+    \midrule
+    Licencias de software (código abierto) & 0 \\
+    Microsoft Azure — experimentación realizada & 5 \\
+    \midrule
+    \textbf{Total imputado al proyecto} & \textbf{5} \\
+    \addlinespace
+    \emph{(Referencia: operación continua de 3 máquinas, 1 mes)} & \emph{$\approx$ 75} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Merece la pena subrayar la asimetría entre este capítulo y el
+\cref{cap:negocio}: el coste de cómputo del entrenamiento federado es marginal frente al beneficio
+estimado. El obstáculo para adoptar un esquema como el estudiado no es económico ni tecnológico,
+sino de gobierno del dato y de acuerdo entre las partes.
+
+\section{Resumen del presupuesto}
+
+\begin{table}[H]
+  \centering
+  \caption[Resumen del presupuesto]{Resumen del presupuesto del proyecto.}
+  \label{tab:presupuesto_resumen}
+  \begin{tabular}{lr}
+    \toprule
+    Partida & Coste (€) \\
+    \midrule
+    Personal                       & 15.000 \\
+    Equipos (amortización)         &    175 \\
+    Software y servicios en la nube &      5 \\
+    \midrule
+    \textbf{Subtotal}              & \textbf{15.180} \\
+    Costes indirectos (10\,\%)     &  1.518 \\
+    \midrule
+    \textbf{Total}                 & \textbf{16.698} \\
+    \bottomrule
+  \end{tabular}
+\end{table}

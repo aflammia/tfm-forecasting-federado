@@ -1,4 +1,89 @@
 \chapter{Anexos}
 \label{cap:anexos}
 
-Pendiente de redacción.
+\section{Repositorio y reproducibilidad}
+
+Todo el código, la documentación y los resultados intermedios del proyecto están versionados en un
+repositorio Git. La organización es la siguiente:
+
+\begin{itemize}
+  \item \texttt{src/} — los guiones numerados que componen el flujo de trabajo, desde la descarga
+    de los datos hasta el análisis económico, más los módulos compartidos de modelo, métricas e
+    infraestructura federada.
+  \item \texttt{flower\_app/} — la aplicación de Flower para el despliegue distribuido.
+  \item \texttt{infra/} — los guiones de aprovisionamiento y operación de la infraestructura en la
+    nube.
+  \item \texttt{conf/} y \texttt{configs/} — configuración de los experimentos y parámetros
+    seleccionados en las búsquedas.
+  \item \texttt{reports/} — resultados en formato tabular; todas las cifras de esta memoria
+    proceden de estos ficheros.
+  \item \texttt{tests/} — pruebas automatizadas.
+  \item \texttt{docs/} — cuaderno de laboratorio, diccionario de datos, plan y bibliografía.
+  \item \texttt{memoria/} — fuentes de este documento.
+\end{itemize}
+
+La reproducibilidad se apoya en varios mecanismos. El flujo de preparación de datos está declarado
+como un grafo de dependencias con DVC, de modo que un único comando regenera el conjunto desde los
+datos crudos; se comprobó que la ejecución reproduce exactamente las cifras documentadas. La
+configuración de los experimentos se gestiona con Hydra, lo que permite variar hiperparámetros desde
+la línea de comandos sin editar código. Las semillas aleatorias están fijadas, y como comprobación
+independiente, el recálculo de las siete condiciones y métodos realizado meses después para el
+contraste estadístico reprodujo las siete medianas publicadas con exactitud.
+
+El repositorio incorpora además integración continua que ejecuta el análisis estático de código y la
+batería de pruebas en cada envío de cambios. Las pruebas que dependen de los datos procesados —que
+no se versionan por su tamaño— se omiten automáticamente cuando no están disponibles.
+
+\section{Cuaderno de laboratorio}
+
+Cada paso del proyecto con resultados asociados se registró en un cuaderno de laboratorio con
+estructura de sección de métodos y resultados: objetivo, procedimiento exacto, comandos
+reproducibles, cifras obtenidas, interpretación y justificación de las decisiones. El historial es
+inmutable: las entradas cerradas no se editan y las correcciones se añaden como entradas nuevas que
+referencian a las anteriores. Ese cuaderno es la fuente de la que procede el contenido de los
+\cref{cap:materiales,cap:resultados}, y en él quedan documentados también los errores cometidos y
+corregidos durante el desarrollo, como el desalineamiento de los retardos descrito en el
+\cref{cap:materiales}.
+
+\section{Dificultades del despliegue en la nube}
+
+El despliegue distribuido descrito en el \cref{cap:resultados} exigió resolver una sucesión de
+obstáculos que no aparecen en la literatura pero que condicionan cualquier implantación real. Se
+recogen aquí porque forman parte del resultado de ingeniería del trabajo.
+
+\begin{itemize}
+  \item \textbf{Restricciones de la suscripción.} La región inicialmente prevista estaba vetada por
+    política para la suscripción disponible, y hubo que sondear regiones alternativas hasta
+    encontrar una admitida.
+
+  \item \textbf{Cuota y disponibilidad de máquinas.} La cuota de la suscripción limitaba el número
+    de núcleos, y las máquinas más pequeñas no tenían capacidad disponible en la región elegida.
+    Ello obligó a rediseñar la arquitectura de cuatro nodos a tres, alojando el agregador en uno de
+    los silos. Es un patrón legítimo en federaciones entre organizaciones, en las que con frecuencia
+    uno de los participantes hospeda la coordinación, y no altera el aislamiento de los datos: el
+    agregador solo maneja parámetros y un conjunto de validación de referencia.
+
+  \item \textbf{Consistencia eventual de la nube.} Varios recursos recién creados no eran
+    consultables de inmediato, lo que obligó a introducir reintentos selectivos en el
+    aprovisionamiento.
+
+  \item \textbf{Versiones del entorno.} La imagen del sistema operativo incorporaba una versión de
+    Python anterior a la exigida por el marco federado, lo que requirió instalarla explícitamente;
+    y fue necesario fijar la versión exacta del marco en todos los nodos, ya que el protocolo de
+    comunicación no tolera discrepancias.
+
+  \item \textbf{Propagación del entorno de ejecución.} El proceso que ejecuta la aplicación del
+    servidor no hereda las variables de entorno del proceso que lo lanza, de modo que la
+    configuración del registro de métricas hubo de pasarse por el mecanismo de configuración del
+    propio marco.
+\end{itemize}
+
+Todas estas soluciones quedaron incorporadas a los guiones de aprovisionamiento, de manera que el
+despliegue completo es reproducible mediante una secuencia documentada de comandos.
+
+\section{Cuadro de mando de resultados}
+
+Como complemento a esta memoria se desarrolló un cuadro de mando interactivo que permite explorar la
+comparación entre métodos, la convergencia del entrenamiento federado y el detalle por serie de la
+condición personalizada. Lee los mismos ficheros de resultados que sustentan las tablas y figuras
+de este documento, sin recalcular nada.

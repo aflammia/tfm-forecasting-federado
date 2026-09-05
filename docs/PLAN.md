@@ -209,7 +209,8 @@ Azure ML Studio (MLflow) y registro del modelo global.
 - **Ejecución en Azure (pasos 3-9)** ⏳ requiere `az login` del autor + Azure CLI instalado --
   runbook completo en `infra/README.md`.
 
-### FASE 4b — Capítulos de negocio (RQ3, RQ4) — análisis y escritura, sin entrenar nada
+### FASE 4b — Capítulos de negocio (RQ3, RQ4)
+✅ **Cerrada (2026-09-05, Sesión 32).** Ver más abajo.
 - **T4b.1** — **FL vs. Data Clean Rooms.** Comparación estructurada (tarea que resuelven, movimiento de
   datos, necesidad de tercero de confianza, aplicabilidad entre competidores directos, madurez del
   tooling, postura GDPR). Tesis a defender: los clean rooms analizan datos existentes; el FL construye
