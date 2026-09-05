@@ -1,24 +1,128 @@
 \chapter{Introducción}
 \label{cap:introduccion}
 
-Prueba de compilación. Cita entre paréntesis \parencite{mcmahan2017} y cita en texto
-\textcite{li2020fedprox}. Cifra con formato español: 0,1379.
+\section{Contexto}
+
+La previsión de demanda es una de las decisiones con más consecuencias operativas en la
+distribución alimentaria. De ella dependen los pedidos a proveedor, la asignación de espacio en
+lineal y la planificación de personal, y sus errores se materializan en dos costes de signo
+opuesto: si la previsión se queda corta se produce una rotura de stock, con pérdida de venta y de
+margen; si se pasa, el excedente acaba en merma, especialmente en las categorías perecederas. En
+el comercio de alimentación europeo se estima que entre el 5\,\% y el 7\,\% de los productos
+perecederos se desecha, y los perecederos representan aproximadamente la mitad de la venta de un
+supermercado. Con márgenes netos del sector en torno al 2\,\%, una mejora moderada de la precisión
+de la previsión tiene un efecto apreciable sobre el resultado.
+
+La calidad de un modelo de previsión depende en buena medida del volumen y la variedad de datos
+con los que se entrena. Una tienda aislada dispone de un histórico limitado; un modelo entrenado
+con los datos de muchas tiendas puede aprender patrones —estacionalidad, efecto de las
+promociones, comportamiento de los festivos— que en una serie individual quedan ocultos por el
+ruido. Esta observación empuja de forma natural hacia la centralización de datos.
+
+El problema es que esa centralización no siempre es posible. Dentro de una misma cadena, juntar
+los datos de sus tiendas es una decisión interna sin obstáculos. Entre operadores distintos, en
+cambio, los datos de venta a nivel de tienda y producto son información comercial sensible:
+revelan la estructura de surtido, la posición competitiva y la respuesta a las promociones. A la
+reticencia competitiva se suma el marco normativo europeo, que impone principios de minimización y
+limitación de la finalidad sobre los datos personales que puedan estar implicados. El resultado es
+una situación paradójica: los operadores que más se beneficiarían de un modelo conjunto son
+precisamente los que no pueden construirlo por la vía habitual.
 
 \begin{figure}[H]
   \centering
   \begin{tikzpicture}[
-      nodo/.style={draw,rounded corners,minimum width=2.2cm,minimum height=0.8cm,font=\small},
+      op/.style={draw,rounded corners,minimum width=2.6cm,minimum height=1.15cm,
+                 align=center,font=\small,fill=black!3},
+      etiqueta/.style={font=\footnotesize\itshape,text=black!60},
       >={Stealth[round]}]
-    \node[nodo] (s) {Servidor};
-    \node[nodo,below left=1.2cm and 1.2cm of s] (a) {Silo A};
-    \node[nodo,below=1.2cm of s] (b) {Silo B};
-    \node[nodo,below right=1.2cm and 1.2cm of s] (c) {Silo C};
-    \draw[->] (a) -- (s);
-    \draw[->] (b) -- (s);
-    \draw[->] (c) -- (s);
+    \node[op] (a) {Operador A\\[-2pt]{\footnotesize datos propios}};
+    \node[op,right=1.6cm of a] (b) {Operador B\\[-2pt]{\footnotesize datos propios}};
+    \node[op,right=1.6cm of b] (c) {Operador C\\[-2pt]{\footnotesize datos propios}};
+
+    \node[draw,dashed,rounded corners,below=1.8cm of b,minimum width=3.6cm,
+          minimum height=1.0cm,align=center,font=\small] (pool) {Repositorio común};
+
+    \draw[->,dashed,black!45] (a) -- (pool);
+    \draw[->,dashed,black!45] (b) -- (pool);
+    \draw[->,dashed,black!45] (c) -- (pool);
+
+    \node[font=\large,text=black!75] at ($(a)!0.55!(pool)$) {\textbf{×}};
+    \node[font=\large,text=black!75] at ($(b)!0.55!(pool)$) {\textbf{×}};
+    \node[font=\large,text=black!75] at ($(c)!0.55!(pool)$) {\textbf{×}};
   \end{tikzpicture}
-  \caption{Prueba de diagrama vectorial en TikZ.}
-  \label{fig:prueba_tikz}
+  \caption[El obstáculo a la centralización de datos entre operadores]{La vía habitual para
+  mejorar un modelo de previsión —juntar los datos de todos los participantes en un repositorio
+  común— no está disponible cuando los participantes compiten entre sí: los datos de venta por
+  tienda y producto son información comercial sensible.}
+  \label{fig:problema_centralizacion}
 \end{figure}
 
-En la \cref{fig:prueba_tikz} se comprueba la referencia cruzada.
+\section{El aprendizaje federado como alternativa}
+
+El aprendizaje federado propone invertir el flujo habitual: en lugar de mover los datos hacia el
+modelo, mueve el modelo hacia los datos. Cada participante entrena localmente con su propia
+información y envía a un coordinador únicamente los parámetros resultantes; el coordinador los
+promedia y devuelve un modelo agregado que incorpora lo aprendido por todos sin que ninguno haya
+cedido un solo registro. La formulación de referencia de este esquema es el algoritmo
+\emph{Federated Averaging} \parencite{mcmahan2017}.
+
+Sobre el papel, esto encaja con el problema descrito: permitiría a varios operadores construir un
+modelo conjunto de previsión conservando sus datos. La pregunta que este trabajo se plantea es si
+ese encaje conceptual se sostiene empíricamente, es decir, si un modelo federado predice mejor que
+el que cada operador podría entrenar por su cuenta, y cómo se sitúa frente a las alternativas
+realmente disponibles en la práctica, incluidos los métodos convencionales de previsión que se
+utilizan a diario en el sector.
+
+\section{Motivación y enfoque}
+
+Buena parte de la literatura de aprendizaje federado evalúa el método frente al escenario
+centralizado ideal, dando por supuesto que este último constituye el techo de rendimiento
+alcanzable. Ese marco deja fuera dos comprobaciones que resultan decisivas para justificar su
+adopción en un caso real. La primera es la comparación con métodos convencionales sencillos: si
+una media móvil de cuatro semanas iguala el rendimiento de una arquitectura federada, la
+complejidad adicional es difícil de defender. La segunda es la cuantificación del beneficio
+económico, sin la cual no hay criterio para decidir si compensa montar la infraestructura.
+
+Este trabajo adopta por tanto un enfoque doble, técnico y de negocio. En el plano técnico compara
+cinco condiciones experimentales —local, centralizado por silo, centralizado global, federado y
+federado con personalización— entre sí y frente a cuatro métodos convencionales de previsión,
+sobre un mismo conjunto de datos, una misma partición temporal y un mismo protocolo de evaluación,
+con contraste estadístico de todas las diferencias. En el plano de negocio traduce la mejora
+obtenida a unidades de error evitadas y, a partir de ahí, a un rango de ahorro económico, y compara
+el aprendizaje federado con la alternativa comercial más extendida para la colaboración entre
+empresas que no comparten datos, los \emph{data clean rooms}.
+
+\section{Aportaciones}
+
+Las aportaciones principales de este trabajo son cuatro.
+
+En primer lugar, una comparación homogénea y estadísticamente contrastada de trece métodos de
+previsión sobre el mismo problema, que sitúa al aprendizaje federado en un marco realista en vez de
+compararlo únicamente contra el escenario centralizado.
+
+En segundo lugar, la identificación y documentación de tres resultados que contradicen la
+intuición de partida del proyecto: que centralizar datos de tiendas heterogéneas empeora el modelo
+en lugar de mejorarlo; que el aprendizaje federado por sí solo rinde peor que el modelo local,
+siendo la personalización posterior la que lo vuelve competitivo; y que un ajuste de
+hiperparámetros que beneficia claramente a una etapa del proceso puede perjudicar a la siguiente.
+
+En tercer lugar, un despliegue real del sistema federado sobre tres máquinas independientes en la
+nube, con aislamiento efectivo de los datos de cada silo, que traslada el experimento desde el
+entorno de simulación a una infraestructura distribuida.
+
+Por último, un modelo de cuantificación económica que separa de forma explícita lo que se deriva de
+los datos propios de lo que depende de supuestos externos, y que incorpora un análisis de robustez
+sobre la distribución del beneficio.
+
+\section{Estructura del documento}
+
+El \cref{cap:estado_arte} revisa el estado del arte en previsión de demanda en distribución,
+aprendizaje federado y tecnologías de colaboración con protección de datos. El
+\cref{cap:objetivos} formula los objetivos y las preguntas de investigación. El
+\cref{cap:materiales} describe los datos, su preparación, el modelo empleado, el diseño
+experimental y la infraestructura. El \cref{cap:resultados} presenta los resultados, incluido el
+contraste estadístico y el despliegue distribuido. El \cref{cap:discusion} los interpreta y expone
+las limitaciones del estudio. El \cref{cap:negocio} aborda las dos preguntas de negocio: la
+cuantificación del valor y la comparación con los \emph{data clean rooms}. El
+\cref{cap:presupuesto} recoge el presupuesto del proyecto y el \cref{cap:conclusiones}, las
+conclusiones y las líneas de trabajo futuro.

@@ -1,4 +1,296 @@
 \chapter{Materiales y métodos}
-\label{cap:04_materiales_metodos}
+\label{cap:materiales}
 
-Pendiente de redacción.
+\section{Conjunto de datos}
+
+Los experimentos se realizan sobre el histórico de ventas de Corporación Favorita, una cadena de
+distribución ecuatoriana, publicado como conjunto de datos abierto \parencite{kaggle_storesales}.
+Contiene las ventas diarias de 54 tiendas y 33 familias de producto entre 2013 y 2017, junto con
+ficheros auxiliares de metadatos de tienda, transacciones, precio del petróleo y calendario de
+festivos.
+
+La elección de este conjunto responde a que reúne tres condiciones poco frecuentes de forma
+simultánea: es real, es lo bastante grande para entrenar modelos con sentido, y contiene una
+estructura de tiendas con formatos diferenciados que permite construir silos con heterogeneidad
+genuina. Su limitación principal, relevante para el \cref{cap:negocio}, es que no incluye precios
+ni márgenes: las ventas se expresan en unidades.
+
+\subsection{Granularidad de la previsión}
+
+Se predice a nivel de \textbf{tienda × familia de producto × semana}, y no a nivel de referencia
+individual ni de día. Esta decisión responde a cuatro razones. La granularidad semanal por familia
+es la que corresponde a las decisiones de reposición agregada y de planificación, que es el uso al
+que apunta el trabajo. El número de series resultante, 1.782, es manejable para entrenar y evaluar
+cinco condiciones experimentales de forma repetida. La agregación semanal reduce la intermitencia
+severa que presentan muchas series diarias a nivel de referencia. Y, por último, el conjunto de
+datos no contiene precios ni stock por referencia, lo que haría poco fiable una previsión a ese
+nivel de detalle.
+
+La contrapartida es que los resultados no son directamente extrapolables a la reposición de una
+referencia concreta, que es un problema distinto y más difícil.
+
+\subsection{Definición de los silos}
+
+Los silos, que son los participantes de la federación, se definen por \textbf{formato de tienda}
+agrupando los tipos originales de la cadena: el silo Grande reúne las 9 tiendas de tipo A, el
+Mediano las 26 de tipos D y B, y el Pequeño las 19 de tipos E y C. El criterio se eligió tras
+comparar varias particiones alternativas porque es el que genera mayor heterogeneidad de
+comportamiento entre silos, y se validó con una segunda métrica independiente —el tráfico de
+clientes, correlacionado al 0,91 con la venta— para comprobar que la agrupación no era un artefacto
+de la variable elegida.
+
+Conviene precisar la naturaleza de esta heterogeneidad, porque condiciona la interpretación de los
+resultados. La mezcla de categorías es bastante homogénea entre formatos; lo que difiere de forma
+sustancial es la \emph{escala} de venta, con factores de dos a tres veces entre silos, y la
+\emph{intensidad promocional}. La \cref{fig:composicion_silos} muestra esa composición.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\textwidth]{datos_composicion_silos.png}
+  \caption[Composición de los silos]{Reparto de tiendas y de volumen de venta entre los tres
+  silos definidos por formato de tienda. La heterogeneidad entre silos se manifiesta sobre todo
+  en la escala de venta, no en la mezcla de categorías.}
+  \label{fig:composicion_silos}
+\end{figure}
+
+\section{Preparación de los datos}
+
+\subsection{Agregación y variables exógenas}
+
+A partir del histórico diario se construye la serie semanal por tienda y familia, sumando las
+ventas y promediando la intensidad promocional. Se incorporan el precio semanal del petróleo
+—relevante en una economía dependiente del crudo como la ecuatoriana—, los festivos nacionales,
+regionales y locales, y una señal de semana con día de cobro. El tratamiento de los festivos exige
+cuidado: los registros marcados como transferidos no se observan en la fecha original sino en la de
+traslado, y las jornadas de recuperación de puente no son festivos a efectos de demanda.
+
+Se recorta además el historial anterior a la apertura de cada tienda, ya que ocho de las 54 abrieron
+después del inicio del periodo y una de ellas dispone de apenas cuatro meses de datos.
+
+\subsection{Un problema encontrado en los datos: los huecos de Navidad}
+
+Durante la construcción del conjunto se detectó un problema que ilustra la importancia de validar
+los supuestos sobre los datos. El 25 de diciembre no existe ninguna fila en el histórico original
+para ninguna tienda ni familia: las tiendas cierran y no se registra siquiera una venta de valor
+cero. Al descartar las semanas incompletas, esa ausencia deja un hueco interno en el calendario de
+1.749 de las 1.782 series.
+
+El problema es que el cálculo de retardos mediante desplazamiento de filas avanza por posición y no
+por fecha, de modo que un hueco interno desalinea silenciosamente todos los retardos posteriores a
+cada Navidad. La corrección consistió en reindexar cada serie sobre un calendario semanal completo,
+marcando los huecos como ausentes, antes de calcular cualquier retardo o media móvil. El conjunto se
+regeneró con esta corrección y quedó en 322.245 filas. Se añadió además una prueba automática que
+verifica que ninguna fila del conjunto final queda inmediatamente después de un hueco interno.
+
+\subsection{Variables predictoras}
+
+Cada observación se describe mediante 17 variables continuas y dos identificadores categóricos.
+Las variables continuas son: los retardos de 1, 2, 4 y 8 semanas, las medias móviles de 4 y 8
+semanas y la desviación típica de 4 semanas —todos ellos calculados sobre la escala logarítmica de
+la venta, y excluyendo la semana en curso para evitar la fuga de información—, la intensidad
+promocional, el precio del petróleo, la codificación cíclica en seno y coseno de la semana del año y
+del mes, las tres señales de festivo y la señal de día de cobro. Los identificadores de familia y de
+tienda se incorporan como variables categóricas destinadas a las capas de \emph{embedding}.
+
+La variable objetivo es el logaritmo de la venta semanal, transformación adecuada dada la
+distribución fuertemente asimétrica de las ventas y la presencia del pico atípico asociado al
+terremoto de abril de 2016.
+
+Las variables continuas se estandarizan mediante puntuación z, con medias y desviaciones calculadas
+\emph{exclusivamente} sobre el conjunto de entrenamiento, para no filtrar información de validación
+ni de prueba.
+
+\subsection{Partición temporal}
+
+La partición es de tipo \emph{walk-forward}, respetando estrictamente el orden cronológico, como
+corresponde a un problema de series temporales. El conjunto de entrenamiento abarca 220 semanas,
+desde el 7 de enero de 2013 hasta el 17 de abril de 2017; el de validación, las 8 semanas
+siguientes, hasta el 12 de junio de 2017; y el de prueba, las 8 últimas, hasta el 7 de agosto de
+2017. Se excluyen las semanas incompletas, que representan un 2,55\,\% de las filas. La
+\cref{fig:split} representa el esquema.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[font=\small]
+    \fill[black!12] (0,0) rectangle (8.6,0.75);
+    \fill[black!30] (8.6,0) rectangle (10.3,0.75);
+    \fill[black!55] (10.3,0) rectangle (12.0,0.75);
+    \draw (0,0) rectangle (12.0,0.75);
+    \draw (8.6,0) -- (8.6,0.75);
+    \draw (10.3,0) -- (10.3,0.75);
+    \node at (4.3,0.375) {Entrenamiento — 220 semanas};
+    \node[white] at (9.45,0.375) {Val. 8};
+    \node[white] at (11.15,0.375) {Test 8};
+    \foreach \x/\fecha in {0/2013-01-07, 8.6/2017-04-17, 10.3/2017-06-12, 12.0/2017-08-07}{
+      \draw[black!45] (\x,0) -- (\x,-0.18);
+      \node[rotate=35,anchor=north east,font=\scriptsize] at (\x,-0.20) {\fecha};
+    }
+    \draw[->,>=Stealth] (0,-1.5) -- (12.0,-1.5) node[right,font=\footnotesize] {tiempo};
+  \end{tikzpicture}
+  \caption[Partición temporal \emph{walk-forward}]{Partición temporal empleada. El orden
+  cronológico se respeta estrictamente: la validación es posterior al entrenamiento y la prueba,
+  posterior a la validación.}
+  \label{fig:split}
+\end{figure}
+
+El conjunto final contiene 322.245 filas, repartidas en 293.997 de entrenamiento, 13.992 de
+validación y 14.256 de prueba. La validación cubre 53 de las 54 tiendas: la que abrió en abril de
+2017 no tiene todavía historial suficiente en ese tramo.
+
+\subsection{Ceros estructurales por falta de surtido}
+
+Un segundo aspecto de los datos merece mención explícita porque afecta a la interpretación de los
+resultados. No todas las tiendas venden todas las familias: 779 de las 1.749 series con historial
+—un 45\,\%— presentan un prefijo de más de cuatro semanas con venta nula al inicio del periodo de
+entrenamiento. No se trata de demanda no atendida sino de ausencia de surtido, y en ocasiones se
+extiende a casi todo el periodo, como sucede con familias de textil o libros en tiendas de
+proximidad.
+
+Estos ceros son datos legítimos y no se eliminan: la combinación tienda × familia existe siempre en
+el conjunto, con venta cero cuando no hay surtido. El modelo, que dispone de los retardos y las
+medias móviles de cada serie, aprende a predecir valores próximos a cero en esos casos, que es la
+respuesta correcta. La distinción importa, sin embargo, para los métodos que estiman de forma
+explícita tendencia y estacionalidad sobre la serie completa: en el suavizado exponencial, ese
+prefijo de ceros distorsionaba gravemente la estimación inicial y obligó a recortarlo antes del
+ajuste.
+
+\section{Modelo de previsión}
+
+Todas las condiciones experimentales comparten la misma arquitectura, de modo que las diferencias
+observadas sean atribuibles a la forma de entrenamiento y no al modelo. Se trata de un perceptrón
+multicapa con \emph{embeddings} de entidad, representado en la \cref{fig:arquitectura_mlp}.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      caja/.style={draw,rounded corners,minimum height=0.85cm,align=center,font=\footnotesize},
+      >={Stealth[round]},node distance=0.55cm]
+    \node[caja,minimum width=2.9cm,fill=black!3] (cont) {17 variables continuas\\(normalizadas)};
+    \node[caja,minimum width=2.9cm,below=of cont,fill=black!3] (fam)
+      {\emph{embedding} familia\\33 $\rightarrow$ 8};
+    \node[caja,minimum width=2.9cm,below=of fam,fill=black!3] (tie)
+      {\emph{embedding} tienda\\54 $\rightarrow$ 8};
+
+    \node[caja,right=1.5cm of fam,minimum width=1.5cm] (concat) {concat.\\33};
+    \node[caja,right=0.7cm of concat,minimum width=1.4cm] (h1) {Densa\\64};
+    \node[caja,right=0.6cm of h1,minimum width=1.4cm] (h2) {Densa\\32};
+    \node[caja,right=0.6cm of h2,minimum width=1.4cm] (out) {Salida\\1};
+
+    \draw[->] (cont.east) -- (concat.west);
+    \draw[->] (fam.east) -- (concat.west);
+    \draw[->] (tie.east) -- (concat.west);
+    \draw[->] (concat) -- (h1);
+    \draw[->] (h1) -- (h2);
+    \draw[->] (h2) -- (out);
+    \node[below=0.15cm of h1,font=\scriptsize,text=black!60] {ReLU + \emph{dropout}};
+    \node[below=0.15cm of h2,font=\scriptsize,text=black!60] {ReLU};
+    \node[below=0.15cm of out,font=\scriptsize,text=black!60] {log(venta)};
+  \end{tikzpicture}
+  \caption[Arquitectura del modelo]{Arquitectura del perceptrón multicapa con \emph{embeddings} de
+  entidad, común a las cinco condiciones experimentales: 4.985 parámetros en total.}
+  \label{fig:arquitectura_mlp}
+\end{figure}
+
+Los \emph{embeddings} permiten que el modelo aprenda una representación densa de cada familia y de
+cada tienda en lugar de tratarlas como variables indicadoras dispersas, lo que resulta
+especialmente útil en el escenario federado: la tabla de \emph{embeddings} es compartida, de modo
+que una familia poco frecuente en un silo se beneficia de lo aprendido en los silos donde sí es
+habitual.
+
+El entrenamiento emplea la función de pérdida de Huber, robusta frente a valores atípicos como el
+pico del terremoto de 2016, y el optimizador Adam, con parada temprana sobre el conjunto de
+validación. El modelo tiene 4.985 parámetros, un tamaño deliberadamente reducido: en aprendizaje
+federado el coste de comunicación es proporcional al número de parámetros que se intercambian en
+cada ronda.
+
+\section{Diseño experimental}
+
+Se comparan cinco condiciones que difieren únicamente en qué datos entrenan el modelo y cómo:
+
+\begin{description}
+  \item[A — Local.] Un modelo independiente por tienda, entrenado solo con sus propios datos. Es el
+    punto de partida sin colaboración: lo que cada operador podría hacer por su cuenta.
+  \item[B — Centralizado por silo.] Un modelo por silo, entrenado con los datos de todas las
+    tiendas de ese formato. Representa la centralización interna de un operador.
+  \item[C — Centralizado global.] Un único modelo con los datos de los tres silos juntos.
+    Corresponde al escenario que la literatura suele tomar como techo de rendimiento y que en la
+    práctica sería inviable entre competidores.
+  \item[D — Federado.] Los tres silos entrenan mediante FedAvg, sin compartir datos crudos. Se
+    evalúa también FedProx como variante para heterogeneidad.
+  \item[E — Federado con personalización.] Se parte de los pesos del modelo federado y se realiza un
+    ajuste fino por tienda con sus propios datos.
+\end{description}
+
+La \cref{fig:esquema_federado} representa el esquema de una ronda federada. Es importante notar que
+los participantes son los tres silos, no las 54 tiendas: cada silo centraliza internamente sus
+propias tiendas, lo cual es legítimo porque corresponde a un mismo operador. La personalización por
+tienda de la condición E es un ajuste posterior a la convergencia, no un nivel adicional de
+federación.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      nodo/.style={draw,rounded corners,minimum width=2.5cm,minimum height=0.95cm,
+                   align=center,font=\footnotesize},
+      >={Stealth[round]}]
+    \node[nodo,fill=black!5] (srv) {Coordinador\\{\scriptsize promedia los parámetros}};
+    \node[nodo,below left=1.9cm and 2.0cm of srv] (s1) {Silo Grande\\{\scriptsize 9 tiendas}};
+    \node[nodo,below=1.9cm of srv] (s2) {Silo Mediano\\{\scriptsize 26 tiendas}};
+    \node[nodo,below right=1.9cm and 2.0cm of srv] (s3) {Silo Pequeño\\{\scriptsize 19 tiendas}};
+
+    \foreach \s in {s1,s2,s3}{
+      \draw[->,black!60] (srv) to[bend right=13] (\s);
+      \draw[->,black!35,dashed] (\s) to[bend right=13] (srv);
+    }
+    \node[font=\scriptsize,text=black!60,below=0.3cm of s2,align=center]
+      {los datos nunca salen del silo};
+    \node[font=\scriptsize,text=black!60,above right=0.1cm and 0.2cm of srv,align=left]
+      {\textbf{---}~modelo global\\ \textbf{-\,-}~parámetros locales};
+  \end{tikzpicture}
+  \caption[Esquema de una ronda de entrenamiento federado]{Una ronda de FedAvg: el coordinador
+  envía los parámetros del modelo global, cada silo entrena localmente unas pocas épocas y devuelve
+  los parámetros resultantes, que se promedian ponderando por el número de filas de cada silo. Los
+  datos permanecen siempre en el silo.}
+  \label{fig:esquema_federado}
+\end{figure}
+
+Como referencia externa se evalúan además cuatro métodos convencionales: los baselines ingenuos de
+persistencia y estacional de 52 semanas, la media móvil de 4 semanas, el suavizado exponencial
+ETS/Holt-Winters ajustado serie a serie, y un modelo LightGBM global con los identificadores de
+tienda y familia como variables categóricas. Este último se incluye como referencia clásica no
+federada de máxima exigencia; no se federa, porque el promediado de parámetros de FedAvg opera
+sobre pesos de redes neuronales y no tiene equivalente directo en un conjunto de árboles.
+
+\section{Métricas y contraste estadístico}
+
+La métrica principal es el WMAPE (\emph{weighted mean absolute percentage error}), definido para
+cada serie como el cociente entre la suma de los errores absolutos y la suma de las ventas reales.
+Se elige frente al MAPE porque las ventas incluyen ceros y valores muy pequeños, ante los cuales el
+MAPE se vuelve inestable. Se reportan además el MASE y el RMSSE, que escalan el error respecto al
+de un método ingenuo sobre el propio historial de la serie.
+
+Las métricas se calculan por serie y se agregan por la \emph{mediana}, no por la media, para que un
+puñado de series con error extremo —habituales en familias de demanda intermitente— no domine la
+comparación. Se reporta también la cobertura, es decir, la proporción de series para las que cada
+método produce una previsión válida.
+
+Las diferencias entre métodos se contrastan mediante el test de Wilcoxon de rangos con signo
+pareado por serie, que no asume normalidad de las diferencias. Dado que se realizan ocho contrastes
+sobre los mismos datos, se aplica la corrección de Holm-Bonferroni para controlar la tasa de error
+por familia de comparaciones.
+
+\section{Infraestructura}
+
+La experimentación se realiza con Flower, un marco específico para aprendizaje federado, en su
+versión 1.32.1. Los experimentos de las condiciones D y E se ejecutan primero con su motor de
+simulación, que reproduce los participantes como procesos dentro de una misma máquina, lo que
+permite iterar con rapidez.
+
+Dado que ese modo no verifica que el esquema funcione sobre infraestructura realmente distribuida,
+el sistema se desplegó además sobre tres máquinas virtuales independientes en Microsoft Azure, cada
+una con los datos de un único silo. Los detalles y los resultados de ese despliegue se describen en
+el \cref{cap:resultados}.
+
+Todo el código, los datos derivados y los resultados intermedios se gestionan en un repositorio con
+control de versiones, con pruebas automatizadas, integración continua y versionado de datos, según
+se detalla en el \cref{cap:anexos}.

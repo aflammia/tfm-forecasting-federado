@@ -1,4 +1,77 @@
 \chapter{Objetivos y preguntas de investigación}
-\label{cap:03_objetivos}
+\label{cap:objetivos}
 
-Pendiente de redacción.
+\section{Objetivo general}
+
+El objetivo general de este trabajo es determinar, con evidencia empírica y contraste estadístico,
+si el aprendizaje federado constituye una alternativa útil para la previsión de demanda en
+distribución alimentaria cuando la centralización de datos no es viable, y cuantificar el valor de
+negocio que aportaría su adopción.
+
+La formulación es deliberadamente neutra respecto al resultado. El trabajo no parte de la hipótesis
+de que el aprendizaje federado sea superior, sino de la pregunta de si lo es, y admite como
+resultado válido que no lo sea.
+
+\section{Preguntas de investigación}
+
+El objetivo general se concreta en cinco preguntas, dos técnicas, dos de negocio y una de alcance
+ampliado.
+
+\begin{description}
+  \item[RQ1 (técnica).] ¿Un modelo federado predice mejor que el modelo local de cada tienda y se
+    aproxima al centralizado, sin compartir datos crudos, en presencia de heterogeneidad entre
+    silos? La pregunta incluye la personalización posterior del modelo federado como variante a
+    evaluar.
+
+  \item[RQ2 (técnica).] ¿Supera el modelo federado a los métodos convencionales de previsión en
+    distribución, es decir, a los baselines ingenuos, al suavizado exponencial y a los árboles
+    potenciados por gradiente?
+
+  \item[RQ3 (negocio).] ¿Qué valor económico genera la mejora de precisión atribuible a la
+    colaboración federada, expresado como reducción de error de previsión y traducido a un rango
+    monetario?
+
+  \item[RQ4 (negocio).] ¿Por qué sería preferible un esquema federado a un \emph{data clean room}
+    para la previsión colaborativa entre operadores que no comparten datos?
+
+  \item[RQ5 (ampliación).] ¿Qué coste en precisión tendría añadir garantías formales de privacidad
+    mediante privacidad diferencial?
+\end{description}
+
+\section{Objetivos específicos}
+
+Para responder a esas preguntas se definen los siguientes objetivos específicos:
+
+\begin{enumerate}
+  \item Construir un conjunto de datos de previsión a partir de un histórico real de ventas de
+    distribución, con una partición temporal que impida la fuga de información y una definición de
+    silos que reproduzca heterogeneidad realista entre participantes.
+
+  \item Implementar un modelo de previsión común a todas las condiciones experimentales, de modo
+    que las diferencias observadas sean atribuibles a la forma de entrenamiento y no a la
+    arquitectura.
+
+  \item Evaluar cinco condiciones —local, centralizado por silo, centralizado global, federado y
+    federado con personalización— y compararlas entre sí y frente a los métodos convencionales
+    mediante un protocolo único y un contraste estadístico pareado.
+
+  \item Desplegar el sistema federado sobre infraestructura distribuida real, con aislamiento
+    efectivo de los datos de cada silo, para verificar que el algoritmo estudiado en simulación se
+    comporta igual fuera de ella.
+
+  \item Cuantificar el valor económico de la mejora obtenida y compararlo con la alternativa de los
+    \emph{data clean rooms}.
+\end{enumerate}
+
+\section{Alcance y delimitación}
+
+El trabajo se delimita en los siguientes términos. La granularidad de previsión es tienda ×
+familia de producto × semana, no referencia individual ni día, por las razones que se detallan en
+el \cref{cap:materiales}. El horizonte de evaluación son las ocho últimas semanas del histórico
+disponible. El modelo federado se entrena con los silos como participantes, no con las tiendas
+individuales, lo que corresponde al escenario \emph{cross-silo}.
+
+La pregunta RQ5, relativa al coste en precisión de la privacidad diferencial, se plantea como
+ampliación y no se aborda experimentalmente en este trabajo; se retoma en las líneas de trabajo
+futuro del \cref{cap:conclusiones}, apoyada en la recomendación regulatoria descrita en el
+\cref{cap:estado_arte}.

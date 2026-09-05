@@ -1,4 +1,109 @@
 \chapter{Estado del arte}
-\label{cap:02_estado_del_arte}
+\label{cap:estado_arte}
 
-Pendiente de redacción.
+Este capítulo revisa los tres cuerpos de literatura sobre los que se apoya el trabajo: los métodos
+de previsión de demanda empleados en distribución, el aprendizaje federado y sus variantes para
+datos heterogéneos, y las tecnologías de colaboración entre organizaciones que no comparten datos,
+donde se sitúan tanto el propio aprendizaje federado como los \emph{data clean rooms}.
+
+\section{Previsión de demanda en distribución}
+
+La previsión de ventas en distribución tiene características que la separan de otros problemas de
+series temporales. El número de series es muy elevado —el producto de tiendas por categorías o
+referencias—, muchas de ellas son cortas, intermitentes o con ceros estructurales, y las señales
+relevantes son en buena medida exógenas: promociones, festivos, calendario de cobro y estacionalidad
+anual.
+
+Los métodos clásicos siguen siendo la referencia de partida. Los modelos ingenuos —la persistencia,
+que repite el último valor observado, y el estacional, que repite el valor de la misma semana del
+año anterior— proporcionan el suelo de comparación mínimo. El suavizado exponencial en su
+formulación de espacio de estados, habitualmente designado como ETS, y los modelos de la familia
+Holt-Winters añaden tendencia y estacionalidad de forma explícita, y durante décadas han constituido
+el estándar operativo del sector.
+
+La irrupción de los métodos de aprendizaje automático, y en particular de los árboles potenciados
+por gradiente, ha desplazado parcialmente ese estándar en las competiciones de previsión. Sin
+embargo, la evidencia más reciente matiza el entusiasmo: \textcite{petropoulos2024} muestran que en
+previsión minorista los métodos sencillos y de bajo coste computacional resultan sorprendentemente
+competitivos frente a alternativas mucho más complejas, y advierten de que la ganancia marginal de
+la sofisticación es menor de lo que se suele suponer. Esta observación es directamente pertinente
+para este trabajo, y motiva la decisión de incluir baselines convencionales en la comparación en
+lugar de contrastar el modelo federado únicamente contra otras variantes de red neuronal.
+
+\section{Aprendizaje federado}
+
+\subsection{Formulación básica}
+
+El aprendizaje federado fue formulado por \textcite{mcmahan2017} para entrenar modelos sobre datos
+distribuidos en dispositivos sin centralizarlos. El algoritmo de referencia, \emph{Federated
+Averaging} (FedAvg), procede por rondas: el servidor envía los parámetros del modelo global a los
+participantes; cada uno entrena unas pocas épocas con sus datos locales; el servidor recibe los
+parámetros resultantes y los promedia ponderando por el número de muestras de cada participante. El
+proceso se repite hasta convergencia. El dato crudo no abandona en ningún momento al participante.
+
+La literatura distingue dos escenarios según la naturaleza de los participantes. En el federado
+\emph{cross-device} los participantes son muchos dispositivos con pocos datos cada uno y
+disponibilidad intermitente. En el federado \emph{cross-silo}, que es el que corresponde a este
+trabajo, los participantes son pocas organizaciones con volúmenes grandes de datos y disponibilidad
+estable.
+
+\subsection{Heterogeneidad entre participantes}
+
+El supuesto que más condiciona el rendimiento de FedAvg es que los datos de los participantes sean
+independientes e idénticamente distribuidos. Cuando no lo son —el caso habitual en la práctica—, los
+modelos locales divergen entre rondas y el promediado puede degradar el resultado.
+\textcite{li2020fedprox} proponen FedProx para atenuar ese efecto: añaden a la función de pérdida
+local un término proximal que penaliza el alejamiento respecto de los parámetros globales, limitando
+la divergencia sin renunciar al entrenamiento local.
+
+Una segunda línea de respuesta a la heterogeneidad consiste en abandonar la idea de un modelo único
+para todos. \textcite{arivazhagan2019} proponen FedPer, que separa el modelo en una base compartida,
+entrenada de forma federada, y unas capas de personalización que cada participante entrena solo con
+sus datos y no comparte. La intuición es que la estructura común se aprende mejor entre todos,
+mientras que las particularidades de cada participante se capturan localmente.
+
+\subsection{Aplicación a la previsión en distribución}
+
+La aplicación específica del aprendizaje federado a la previsión de ventas en distribución es
+todavía un área poco poblada. \textcite{long2025pacfl} abordan precisamente este escenario sobre
+datos minoristas heterogéneos y proponen agrupar a los participantes en conglomerados antes de
+federar, reconociendo que un único modelo global no se ajusta bien cuando los silos difieren de
+forma sustancial. Un aspecto metodológico relevante de ese trabajo, y de la práctica habitual del
+campo, es que la evaluación se realiza particionando un único conjunto de datos real según un eje
+que genere heterogeneidad, ya que no existen conjuntos públicos con datos de cadenas competidoras
+reales. Este trabajo sigue esa misma metodología, y sus implicaciones se discuten explícitamente
+como limitación en el \cref{cap:discusion}.
+
+\section{Colaboración con protección de datos}
+
+\subsection{El aprendizaje federado como tecnología de protección de la privacidad}
+
+Desde la perspectiva regulatoria, el aprendizaje federado se encuadra en el conjunto de las
+tecnologías de protección de la privacidad. La Agencia Española de Protección de Datos y el
+Supervisor Europeo de Protección de Datos le han dedicado un informe conjunto
+\parencite{aepdedps2025} en el que reconocen sus ventajas —reducción de la concentración de datos,
+menor exposición en las transferencias y apoyo al principio de protección de datos desde el diseño—
+pero introducen una advertencia importante: los parámetros del modelo que se intercambian pueden
+seguir constituyendo datos personales, ya que son susceptibles de ataques de inferencia, de
+pertenencia y de inversión del modelo. El informe concluye que el aprendizaje federado no basta por
+sí solo como medida de anonimización y recomienda complementarlo con privacidad diferencial o
+agregación segura. Esta observación delimita el alcance de las afirmaciones que pueden hacerse
+sobre la privacidad del esquema estudiado aquí y se retoma en las líneas de trabajo futuro.
+
+\subsection{Data clean rooms}
+
+La alternativa comercial más extendida para que varias organizaciones exploten datos conjuntos sin
+intercambiarlos son los \emph{data clean rooms}. Se trata de entornos controlados en los que cada
+parte aporta sus datos y sobre los que solo pueden ejecutarse consultas o cómputos previamente
+autorizados, con controles de salida —umbrales mínimos de agregación, supresión de celdas, revisión
+de resultados— destinados a impedir la reidentificación.
+
+La guía de referencia del sector \parencite{iabtechlab2024} sistematiza sus principios y delimita
+sus casos de uso, que se concentran en tres ámbitos: la activación y direccionamiento de audiencias
+publicitarias, el enriquecimiento y la generación de conocimiento sobre el consumidor, y la
+medición y optimización de campañas. Su origen y su desarrollo están estrechamente ligados a la
+publicidad digital, y las principales implantaciones comerciales —entre ellas las de los grandes
+proveedores de infraestructura de datos \parencite{snowflake_dcr}— reflejan esa orientación.
+
+La comparación detallada entre ambos enfoques, y la discusión de cuál es el primitivo adecuado para
+el problema que aquí se estudia, se desarrolla en el \cref{cap:negocio}.
