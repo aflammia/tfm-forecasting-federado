@@ -75,7 +75,11 @@ Azure y Fase 4b de negocio). La memoria del TFM está redactada y compila.
   eliminó el capítulo de Presupuesto — no es requisito de la normativa de MADI y era la única
   parte del documento apoyada en cifras estimadas sin trazabilidad a `reports/`). Se genera con
   `cd memoria && bash compilar.sh`.
-- Borrador listo para enviar a la tutora (Idoia Ochoa) y recoger correcciones.
+- `presentacion/presentacion.pdf` — 15 diapositivas 16:9 que resumen el estudio (Sesión 34), para
+  enviar junto con la memoria. Se genera con `cd presentacion && bash compilar.sh`. Las figuras se
+  leen de `memoria/figuras/`, no se duplican.
+- Ambos listos para enviar a la tutora (Idoia Ochoa) y recoger correcciones. La sección de
+  agradecimientos de la memoria está vacía a propósito, pendiente de que la redacte el autor.
 
 **Pendiente de la revisión:**
 1. Incorporar las correcciones que indique la tutora.

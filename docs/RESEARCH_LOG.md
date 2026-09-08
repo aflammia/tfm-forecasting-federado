@@ -2502,6 +2502,81 @@ bash compilar.sh
 
 ---
 
+## Sesión 34 — Presentación resumen del TFM (15 diapositivas)
+
+**Fecha:** 2026-09-08
+**Carpeta nueva:** `presentacion/` (`presentacion.tex`, `compilar.sh`)
+**Objetivo:** un resumen visual del estudio para enviar a la tutora junto con la memoria, de modo
+que no tenga que leer las 59 páginas para hacerse una idea del trabajo.
+
+### Decisiones de formato
+
+El autor pidió seguir la estructura de un TFM de referencia (problema → solución → datos y método →
+resultados → conclusiones → líneas futuras) pero con estética propia de este trabajo.
+
+- **Sin `beamer`:** no está instalado en este equipo y su maquetación por defecto es reconocible al
+  instante. Se compone sobre `article` con geometría de diapositiva 16:9 (25,4 × 14,29 cm) y macros
+  propias (`\diapo`, `\bloque`, `\cifra`, `\pie`).
+- **Paleta:** la misma de las figuras de la memoria (azul #2A78D6 federado, naranja #EB6834 no
+  federado, aqua #1BAF7A negocio). No es decorativo: el deck incrusta esas figuras y debe hablar su
+  mismo idioma visual.
+- **Figuras:** se leen de `../memoria/figuras/` vía `\graphicspath`, sin duplicarlas.
+- **Tipografía:** Fira Sans (`FiraSans.sty`, disponible en la instalación de MiKTeX).
+
+### Contenido (15 diapositivas)
+
+Portada · contenido · el problema · el enfoque federado · las cinco RQ · datos y silos · diseño
+experimental · las cinco condiciones · frente a los convencionales · contraste estadístico ·
+despliegue en Azure · valor económico · federado vs. clean rooms · respuesta a las RQ · líneas
+futuras.
+
+Todas las cifras proceden de `reports/` y de la memoria; no se introdujo ningún dato nuevo. Se
+mantienen explícitos los tres puntos de honestidad del trabajo: el federado pierde frente a
+LightGBM, A vs E es el contraste más débil de los ocho, y el 46,2 % de las series empeoran con la
+personalización.
+
+### Maquetación: cómo se resolvieron los desbordes
+
+Las diapositivas se partían en dos páginas (título solo en una, contenido en la siguiente) porque
+el bloque de contenido no cabía en el alto restante. En lugar de ir tanteando recortes se instrumentó
+la medición, que resultó ser lo que destrabó el problema:
+
+```latex
+\typeout{MEDIDA pagina \thepage: usado=\the\pagetotal\space de \the\pagegoal}
+```
+
+Con `grep -a MEDIDA presentacion.log` se ve exactamente cuánto sobra en cada diapositiva. Alto
+disponible: 355,4 pt. Hallazgos:
+
+1. **El entorno `list` del macro `\bloque` añadía `\partopsep`/`\parsep` implícitos.** Sustituido por
+   composición explícita con `minipage`.
+2. **El `\raisebox` del filete de acento engordaba la altura de línea** de cada bloque (~5 pt por
+   bloque; con 5 bloques, 25 pt). Resuelto con `\raisebox{...}[0pt][0pt]{...}`, que anula la
+   contribución a la altura. Después el filete pasó a componerse midiendo el bloque con `lrbox`
+   para que abarque su altura completa, que era la intención de diseño.
+3. **Mezclar una columna `l` con columnas `p{}`** en la tabla de condiciones desalineaba las líneas
+   base (la letra de la condición aparecía una línea por encima de su nombre). Resuelto usando
+   columnas homogéneas.
+
+### Revisión visual
+
+Igual que con las figuras de la Sesión 32, se revisaron las 15 diapositivas renderizadas una a una,
+no solo el código. Eso detectó cuatro defectos que el log no señala: filetes de acento que parecían
+flotar entre bloques, números en modo matemático con tipografía distinta a la del cuerpo (Computer
+Modern frente a Fira Sans), justificación abriendo huecos en columnas estrechas y un titular
+partido con guion.
+
+### Salidas
+- `presentacion/presentacion.pdf` — 15 páginas, 16:9, sin cajas desbordadas.
+
+### Reproducibilidad
+```bash
+cd "C:/Users/alefl/OneDrive/Escritorio/tfm-forecasting-federado/presentacion"
+bash compilar.sh
+```
+
+---
+
 ## Plantilla para futuras entradas
 
 ```markdown

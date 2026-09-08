@@ -57,3 +57,9 @@ memoria/*.out
 memoria/*.run.xml
 memoria/*.synctex.gz
 memoria/*.toc
+
+# LaTeX de la presentacion (el PDF si se versiona)
+presentacion/*.aux
+presentacion/*.log
+presentacion/*.out
+presentacion/*.synctex.gz
